@@ -4,6 +4,9 @@ import requests
 import json
 from coloring import *
 import os 
+import logging
+
+log = logging.getLogger(__name__)
 
 # Set these environment variables:
 # MS_OPENGRAPH_APP_ID
@@ -22,19 +25,21 @@ BASE_URL = "https://graph.microsoft.com/v1.0/"
 def procure_new_tokens_from_user() -> tuple:
     endpoint = BASE_URL + "me"
     SCOPES = ["User.Read", "User.Export.All, Files.ReadWrite.All"]
+    log.debug("APP_ID %s CLIENT_SECRET %s",APP_ID,CLIENT_SECRET)
+
     client_instance = msal.ConfidentialClientApplication(
         client_id = APP_ID,
-        client_credential = CLIENT_SECRET,
+   #     client_credential = CLIENT_SECRET, seems not needed for desktop app
         authority = AUTHORITY_URL)
     authorization_request_url = client_instance.get_authorization_request_url(SCOPES)
     webbrowser.open(authorization_request_url)
-    # print(authorization_request_url)
-    print("")
-    print("Please enter the code you see in the URL on the web browser:")
+    log.debug(authorization_request_url)
+    log.info("")
+    log.info("Please enter the code you see in the URL on the web browser:")
     authorization_code = input()
     # example: authorization_code = "M.R3_BAY.ec1e0d91-e035-0065-f757-494a9c206744"
     tokenDictionary = client_instance.acquire_token_by_authorization_code(code=authorization_code, scopes=SCOPES)
-    print_balice_blue(tokenDictionary)
+    log.info("TokenDirectory %s",tokenDictionary)
     access_token = tokenDictionary["access_token"]
     refresh_token = tokenDictionary["refresh_token"]
     name = tokenDictionary["id_token_claims"]["name"]
@@ -80,26 +85,28 @@ def get_new_access_token_using_refresh_token(refresh_token:str):
     request_url = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
 
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
-
+    
     scope_list = ["https://graph.microsoft.com/Files.ReadWrite.All"]
     scope = "%20".join(scope_list)
     redirect_uri = (
-        f"https://someuri.com/login"
+        #f"https://someuri.com/login"
+        f"https://login.microsoftonline.com/common/oauth2/nativeclient"
     )
 
     payload = {
         "client_id": APP_ID,
-        "client_secret": CLIENT_SECRET,
+        #"client_secret": CLIENT_SECRET, #removed
         "scope": scope,
+        "tenantID": 'consumers', #added AADSTS9002331: Application is configured for use by Microsoft Account users only. Please use the /consumers endpoint to serve this request. 
         "redirect_uri": redirect_uri,
         "grant_type": "refresh_token",
         "refresh_token": refresh_token,
     }
 
     response = requests.post(url=request_url, headers=headers, data=payload)
-    #print(response.content)
+    log.debug(response.content)
     responseText = response.text
-    # print(responseText)
+    log.debug(responseText)
     j = json.loads(responseText)
 
     return j["access_token"] 
