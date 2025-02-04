@@ -8,3 +8,4 @@ item_download_errors.json
 OneDriveOfflineBackup.bat
 OneDriveOfflineBackup_template.bat
 *.zip
+download_list.pyold

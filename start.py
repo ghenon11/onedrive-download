@@ -1,7 +1,8 @@
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, filedialog
 import logging
 import os
+import config
 from onedrive_authorization_utils import (
     save_refresh_token, load_access_token_from_file,
     procure_new_tokens_from_user, get_new_access_token_using_refresh_token,
@@ -11,7 +12,7 @@ from generate_list import generate_list_of_all_files_and_folders
 from download_list import download_the_list_of_files
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
 def get_refresh_and_access_tokens():
     try:
@@ -54,13 +55,15 @@ def generate_list():
         messagebox.showerror("Error", f"Failed to generate file list: {str(e)}")
 
 def download_files():
+    
+
     try:
         access_token = load_access_token_from_file()
         if not access_token:
             logging.error("No access token found.")
             messagebox.showerror("Error", "No access token found. Please authenticate first.")
             return
-        download_the_list_of_files(access_token)
+        download_the_list_of_files()
         messagebox.showinfo("Success", "Files downloaded successfully.")
         logging.info("File download completed.")
     except Exception as e:
@@ -68,20 +71,60 @@ def download_files():
         messagebox.showerror("Error", f"Failed to download files: {str(e)}")
 
 def main():
+    
+    def exit_button():
+        try:
+            root.quit()
+        except Exception as e:
+            logging.error("Error when exiting", str(e))
+    
+    def confirm_close():
+        result = messagebox.askyesno("Confirm Close", "Are you sure you want to close?")
+        if result:
+            exit_button()
+
+    def choose_directory():
+        directory = filedialog.askdirectory(title="Choose Download Directory", initialdir=config.OFFLINEBACKUP_PATH)
+        if directory:
+            download_dir_var.set(directory)
+            config.OFFLINEBACKUP_PATH = download_dir_var.get()
+            messagebox.showinfo("Success", f"Download directory set to: {config.OFFLINEBACKUP_PATH}")
+
+    def choose_onedrivedirectory():
+        config.ONEDRIVEDIR_PATH = root_dir_var.get()
+        messagebox.showinfo("Success", f"OneDrive Root directory set to: {config.ONEDRIVEDIR_PATH}")
+    
+    def stop_download():
+        config.stop_flag = True
+        log.info("Stopping new downloads...")
+        messagebox.showinfo("Stopping", "New downloads have been stopped.")
+    
     root = tk.Tk()
     root.title("OneDrive Downloader")
-    root.geometry("400x300")
+    root.geometry("400x400")
+    root.protocol("WM_DELETE_WINDOW", confirm_close)
     
     tk.Label(root, text="OneDrive Downloader", font=("Arial", 14, "bold")).pack(pady=10)
+   
+    tk.Label(root, text="Download Directory:").pack()
+    download_dir_var = tk.StringVar(value=config.OFFLINEBACKUP_PATH)
+    tk.Entry(root, textvariable=download_dir_var, width=50).pack()
+    tk.Button(root, text="Choose Directory", command=choose_directory).pack()
     
+    tk.Label(root, text="OneDrive Root Directory:").pack()
+    root_dir_var = tk.StringVar(value=config.ONEDRIVEDIR_PATH)
+    tk.Entry(root, textvariable=root_dir_var, width=50).pack()
+    tk.Button(root, text="Set OneDrive Root Directory", command=choose_onedrivedirectory).pack()
+       
     tk.Button(root, text="Get Refresh and Access Tokens", command=get_refresh_and_access_tokens, width=40).pack(pady=5)
-    tk.Button(root, text="Use Refresh Token to Get New Access Token", command=use_refresh_token_to_get_new_access_token, width=40).pack(pady=5)
+    tk.Button(root, text="Get New Access Token", command=use_refresh_token_to_get_new_access_token, width=40).pack(pady=5)
     tk.Button(root, text="Generate List of All Files and Folders", command=generate_list, width=40).pack(pady=5)
     tk.Button(root, text="Download Files from Generated List", command=download_files, width=40).pack(pady=5)
-    
-    tk.Button(root, text="Exit", command=root.quit, width=40, bg="red", fg="white").pack(pady=10)
+    tk.Button(root, text="Stop Download", command=stop_download, bg="red", fg="white").pack()
+    tk.Button(root, text="Exit", command=exit_button, width=40, bg="red", fg="white").pack(pady=10)
 
     root.mainloop()
-
+    
 if __name__ == "__main__":
+    config.initialize()
     main()
