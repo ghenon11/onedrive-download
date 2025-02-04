@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import messagebox, filedialog
 import logging
-import os
+import os,threading
 import config
 from onedrive_authorization_utils import (
     save_refresh_token, load_access_token_from_file,
@@ -55,15 +55,25 @@ def generate_list():
         messagebox.showerror("Error", f"Failed to generate file list: {str(e)}")
 
 def download_files():
-    
-
+        
+    """Launch process_recording in a separate thread."""
+    def start_download():
+        try:
+            download_the_list_of_files()
+        except Exception as e:
+            logging.error(f"Error in start download: {e}")
+      
     try:
         access_token = load_access_token_from_file()
         if not access_token:
             logging.error("No access token found.")
             messagebox.showerror("Error", "No access token found. Please authenticate first.")
             return
-        download_the_list_of_files()
+        #download_the_list_of_files()
+        # Start the thread
+        recording_thread = threading.Thread(target=start_download, daemon=True)
+        recording_thread.start()
+        
         messagebox.showinfo("Success", "Files downloaded successfully.")
         logging.info("File download completed.")
     except Exception as e:
@@ -96,7 +106,7 @@ def main():
     
     def stop_download():
         config.stop_flag = True
-        log.info("Stopping new downloads...")
+        logging.info("Stopping new downloads...")
         messagebox.showinfo("Stopping", "New downloads have been stopped.")
     
     root = tk.Tk()
@@ -120,7 +130,7 @@ def main():
     tk.Button(root, text="Get New Access Token", command=use_refresh_token_to_get_new_access_token, width=40).pack(pady=5)
     tk.Button(root, text="Generate List of All Files and Folders", command=generate_list, width=40).pack(pady=5)
     tk.Button(root, text="Download Files from Generated List", command=download_files, width=40).pack(pady=5)
-    tk.Button(root, text="Stop Download", command=stop_download, bg="red", fg="white").pack()
+    tk.Button(root, text="Stop Download", command=stop_download, fg="red").pack()
     tk.Button(root, text="Exit", command=exit_button, width=40, bg="red", fg="white").pack(pady=10)
 
     root.mainloop()

@@ -48,12 +48,6 @@ def download_file_by_url(url, local_file_path):
 def ensure_local_path_exists(local_path):
     Path(local_path).mkdir(parents=True, exist_ok=True)
 
-def stop_download():
-    global stop_flag
-    stop_flag = True
-    log.info("Stopping new downloads...")
-    messagebox.showinfo("Stopping", "New downloads have been stopped.")
-
 def get_local_download_folder_by_item(item) -> str:
     master_parent_folder_name = "/drive/root:"
     local_folder_path = item["parentReference"]["path"].replace(master_parent_folder_name, "")
@@ -95,6 +89,8 @@ def is_file_changed(item, local_file_path):
 
 def process_item(item):
     try:
+        if config.stop_flag:
+            return
         download_url = item["@microsoft.graph.downloadUrl"]
         filename = urllib.parse.unquote(item["name"])  # Decode URL-encoded filename
         local_folder_path = get_local_download_folder_by_item(item)
@@ -116,8 +112,10 @@ def process_item(item):
 
 
 def download_the_list_of_files():
+   
     items = load_file_list()
     log.info("Starting download of %s file(s).", len(items))
+    
     with ThreadPoolExecutor(max_workers=config.MAX_WORKERS) as executor:
         futures = {executor.submit(process_item, item): item for item in items}
         for future in as_completed(futures):
