@@ -28,11 +28,11 @@ def process_folder_queue(access_token: str):
     
     headers = {"Authorization": "Bearer " + access_token}
     
-    while not folder_queue.empty():
+    while not folder_queue.empty() and config.stop_flag==False:
         current_folder = folder_queue.get()
         endpoint = get_current_endpoint(current_folder)
                 
-        while endpoint:
+        while endpoint and config.stop_flag==False:
             try:
                 response = requests.get(endpoint, headers=headers)
                 response.encoding = 'utf-8'  # Ensure UTF-8 encoding
@@ -54,6 +54,7 @@ def process_folder_queue(access_token: str):
                         log.debug("Adding %s" % item.get("@microsoft.graph.downloadUrl", "No URL"))
                 
                 endpoint = get_next_link_from_response_dictionary(content)
+                config.status_str="Identification in progress\n"+str(len(file_list))+" files identified so far"
                
             except requests.exceptions.RequestException as e:
                 log.error(f"HTTP error: {e}")
@@ -63,6 +64,7 @@ def process_folder_queue(access_token: str):
                 log.error(f"Unexpected error: {e}")
                 break
     
+    config.status_str="Identification complete\n"+str(len(file_list))+" files identified"
     return file_list, folder_list
 
 def generate_list_of_all_files_and_folders(access_token):

@@ -91,6 +91,8 @@ def process_item(item):
     try:
         if config.stop_flag:
             return
+        config.progress_num += 1
+        config.status_str="Downloading in progress\nFile "+str(config.progress_num)+"/"+str(config.progress_tot)
         download_url = item["@microsoft.graph.downloadUrl"]
         filename = urllib.parse.unquote(item["name"])  # Decode URL-encoded filename
         local_folder_path = get_local_download_folder_by_item(item)
@@ -113,7 +115,11 @@ def process_item(item):
 
 def download_the_list_of_files():
    
+    
     items = load_file_list()
+    config.status_str="Downloads start"
+    config.progress_tot=len(items)
+    config.progress_num=0
     log.info("Starting download of %s file(s).", len(items))
     
     with ThreadPoolExecutor(max_workers=config.MAX_WORKERS) as executor:
@@ -125,7 +131,8 @@ def download_the_list_of_files():
             json.dump(item_download_errors, f, indent=2)
         log.info("Errors logged in item_download_errors.json.")
     log.info("Download process completed.")
-
+    config.status_str="Downloads completed"
+    config.progress_num=0
 
 if __name__ == "__main__":
     download_the_list_of_files()
