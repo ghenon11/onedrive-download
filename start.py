@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox, filedialog
 import logging
-import os,threading,time
+import os,threading,time,traceback
 import config
 from onedrive_authorization_utils import (
     save_refresh_token, load_access_token_from_file,
@@ -12,8 +12,6 @@ from onedrive_authorization_utils import (
 from generate_list import generate_list_of_all_files_and_folders
 from download_list import download_the_list_of_files
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
 def get_refresh_and_access_tokens():
     try:
@@ -35,13 +33,14 @@ def use_refresh_token_to_get_new_access_token():
             return
         new_access_token = get_new_access_token_using_refresh_token(refresh_token)
         save_access_token(new_access_token)
-        messagebox.showinfo("Success", "New access token has been saved.")
         logging.info("New access token saved successfully.")
+        config.status_str="New access token saved successfully."
     except Exception as e:
         logging.error(f"Error refreshing access token: {e}")
         messagebox.showerror("Error", f"Failed to refresh access token: {str(e)}")
 
 def generate_list():
+    global progress_bar
     
     def start_generate():
         try:
@@ -56,6 +55,12 @@ def generate_list():
             logging.error("No access token found.")
             messagebox.showerror("Error", "No access token found. Please authenticate first.")
             return
+        
+        config.stop_flag=False
+        config.progress_num=-1
+        progress_bar.config(mode="indeterminate")
+        progress_bar.config(maximum=100)
+        progress_bar.start()
         # generate_list_of_all_files_and_folders(access_token=access_token)
         # messagebox.showinfo("Success", "File list generated successfully.")
         # logging.info("File list generation completed.")
@@ -64,6 +69,7 @@ def generate_list():
         
     except Exception as e:
         logging.error(f"Error generating file list: {e}")
+        logging.error("Traceback: %s", traceback.format_exc())
         messagebox.showerror("Error", f"Failed to generate file list: {str(e)}")
 
 def download_files():
@@ -74,6 +80,7 @@ def download_files():
             download_the_list_of_files()
         except Exception as e:
             logging.error(f"Error in start download: {e}")
+            logging.error("Traceback: %s", traceback.format_exc())
       
     try:
         access_token = load_access_token_from_file()
@@ -97,6 +104,7 @@ def main():
     
     def exit_button():
         try:
+            stop_download()
             root.quit()
         except Exception as e:
             logging.error("Error when exiting", str(e))
@@ -120,7 +128,7 @@ def main():
     def stop_download():
         config.stop_flag = True
         logging.info("Stopping identification and new downloads...")
-        messagebox.showinfo("Stopping", "New Identification and download have been stopped.")
+        #messagebox.showinfo("Stopping", "New Identification and download have been stopped.")
         
    
     root = tk.Tk()
@@ -144,7 +152,7 @@ def main():
     status_text.insert(tk.END, config.status_str)
     status_text.pack(pady=10)
     progress_var = tk.DoubleVar()
-    progress_bar = ttk.Progressbar(root, variable=progress_var, maximum=config.progress_tot,length=300)
+    progress_bar = ttk.Progressbar(root, variable=progress_var, length=300)
     progress_bar.pack(pady=10)
        
     tk.Button(root, text="Get Refresh and Access Tokens", command=get_refresh_and_access_tokens, width=40).pack(pady=5)
@@ -156,10 +164,23 @@ def main():
     
     def update_progress_bar():
         while True:
-            progress_var.set(config.progress_num)
-            progress_bar.config(maximum=config.progress_tot)
             status_text.delete('1.0',tk.END)
             status_text.insert('1.0', config.status_str)
+            test=progress_bar["mode"]
+            if test == "determinate":
+                if config.progress_num>=0:
+                    progress_var.set(config.progress_num)
+                    progress_bar.config(maximum=config.progress_tot)
+                # else:
+                    # if config.progress_num==-1: # generating file mode
+                        # progress_bar.config(mode="indeterminate")
+                        # time.sleep(1)
+                        # progress_bar.config(maximum=100)
+                        # progress_bar.start()
+            else:
+                if config.progress_num==0:
+                    progress_bar.stop()
+                    progress_bar.config(mode="determinate")
             time.sleep(1)
             
     # Start a thread to update the progress bar
@@ -170,4 +191,7 @@ def main():
     
 if __name__ == "__main__":
     config.initialize()
+    config.init_logging()
+    logging = logging.getLogger(__name__)
+    print(f"Logging in file {config.LOG_FILE}")
     main()

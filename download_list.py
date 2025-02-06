@@ -95,6 +95,7 @@ def process_item(item):
         config.status_str="Downloading in progress\nFile "+str(config.progress_num)+"/"+str(config.progress_tot)
         download_url = item["@microsoft.graph.downloadUrl"]
         filename = urllib.parse.unquote(item["name"])  # Decode URL-encoded filename
+        log.debug("Processing %s",filename)
         local_folder_path = get_local_download_folder_by_item(item)
         local_file_path = os.path.join(local_folder_path, filename)
         ensure_local_path_exists(local_folder_path)
@@ -102,7 +103,7 @@ def process_item(item):
             downloaded_file = download_file_by_url(download_url, local_file_path)
             if downloaded_file:
                 update_file_dates(local_file_path, item)
-                log.info("Downloaded: %s", filename)
+                log.info("Downloaded: %s", local_file_path)
             else:
                 item_download_errors.append(item)
         else:
@@ -112,6 +113,12 @@ def process_item(item):
         log.error("Traceback: %s", traceback.format_exc())
         item_download_errors.append(item)
 
+def safe_submit(executor, func, item):
+    """Submit a task only if there is enough disk space."""
+    if not config.has_enough_space(get_local_download_folder_by_item(item)) and config.stop_flag==False:
+        log.error("Low disk space. Stopping downloads...")
+        config.stop_flag=True  # Wait before checking again
+    return executor.submit(func, item)
 
 def download_the_list_of_files():
    
@@ -121,9 +128,10 @@ def download_the_list_of_files():
     config.progress_tot=len(items)
     config.progress_num=0
     log.info("Starting download of %s file(s).", len(items))
+    log.debug("First one is %s",get_local_download_folder_by_item(items[0]))
     
     with ThreadPoolExecutor(max_workers=config.MAX_WORKERS) as executor:
-        futures = {executor.submit(process_item, item): item for item in items}
+        futures = {safe_submit(executor, process_item, item): item for item in items}
         for future in as_completed(futures):
             future.result()
     if item_download_errors:

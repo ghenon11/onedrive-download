@@ -10,3 +10,16 @@ OneDriveOfflineBackup_template.bat
 *.zip
 download_list.pyold
 downloads
+*.log
+logs/OneDriveOfflineBackup.log.1
+logs/OneDriveOfflineBackup.log.10
+logs/OneDriveOfflineBackup.log.2
+logs/OneDriveOfflineBackup.log.3
+logs/OneDriveOfflineBackup.log.4
+logs/OneDriveOfflineBackup.log.5
+logs/OneDriveOfflineBackup.log.6
+logs/OneDriveOfflineBackup.log.7
+logs/OneDriveOfflineBackup.log.8
+logs/OneDriveOfflineBackup.log.9
+*.old
+*.bad

@@ -14,7 +14,11 @@ def get_next_link_from_response_dictionary(dict) -> str:
     return dict.get("@odata.nextLink", None)
 
 def get_current_endpoint(folder: str) -> str:
-    return BASE_URL + folder + ":/children"
+    if folder=="/me/drive/root:/": # root folder is requested
+        log.debug("Starting identification at OneDrive root folder")
+        return BASE_URL + "/me/drive/root/children"
+    else:
+        return BASE_URL + folder + ":/children"
 
 def get_folder_endpoint_by_folder_item(item) -> str:
     return BASE_URL + "/me" + item["parentReference"]["path"] + "/" + item["name"] + ":/children"
@@ -25,13 +29,13 @@ def process_folder_queue(access_token: str):
     folder_queue.put(root_folder)
     folder_list = []
     file_list = []
-    
+    log.debug("Processing starts at root folder {root_folder}")
     headers = {"Authorization": "Bearer " + access_token}
     
     while not folder_queue.empty() and config.stop_flag==False:
         current_folder = folder_queue.get()
         endpoint = get_current_endpoint(current_folder)
-                
+        log.debug("Processing endpoint {endpoint}")       
         while endpoint and config.stop_flag==False:
             try:
                 response = requests.get(endpoint, headers=headers)
@@ -43,7 +47,7 @@ def process_folder_queue(access_token: str):
                 
                 for item in content.get("value", []):
                     is_folder = "folder" in item
-                    msg = f"{item['name']} {'[FOLDER]' if is_folder else '[FILE]'}"
+                    msg = f"Adding {item['name']} in {current_folder} {'[FOLDER]' if is_folder else '[FILE]'}"
                     log.info(msg)
                     
                     if is_folder:
@@ -65,6 +69,7 @@ def process_folder_queue(access_token: str):
                 break
     
     config.status_str="Identification complete\n"+str(len(file_list))+" files identified"
+    config.progress_num=0
     return file_list, folder_list
 
 def generate_list_of_all_files_and_folders(access_token):
