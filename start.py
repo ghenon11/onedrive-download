@@ -47,6 +47,7 @@ def generate_list():
             generate_list_of_all_files_and_folders(access_token=access_token)
         except Exception as e:
             logging.error(f"Error in start generate list: {e}")
+            logging.error("Traceback: %s", traceback.format_exc())
             
     try:
         use_refresh_token_to_get_new_access_token()
@@ -181,6 +182,8 @@ def main():
                 if config.progress_num==0:
                     progress_bar.stop()
                     progress_bar.config(mode="determinate")
+                    progress_var.set(config.progress_num)
+                    progress_bar.config(maximum=100)
             time.sleep(1)
             
     # Start a thread to update the progress bar
