@@ -21,8 +21,12 @@ lock = threading.Lock()
 item_download_errors = []
 
 def load_file_list() -> list:
-    with open("file_list.json", "r", encoding='utf8') as f:
-        return json.load(f)
+    try:
+        with open("file_list.json", "r", encoding='utf8') as f:
+            return json.load(f)
+    except Exception as e:
+        log.error(f"Error loading file list")
+    return None
 
 
 def download_file_by_url(url, local_file_path):
@@ -37,12 +41,33 @@ def download_file_by_url(url, local_file_path):
             return local_file_path
         except requests.exceptions.HTTPError as http_err:
             log.error(f"HTTP error {http_err.response.status_code}: {http_err}")
-            log.error(f"Attempt {attempt + 1} failed for {url}: HTTP Error {http_err}")
+            if http_err.response.status_code==401:
+                with lock:
+                    refresh_access_token=load_access_token_from_file()
+                    if not refresh_access_token==access_token:
+                        access_token=refresh_access_token
+                        headers["Authorization"] = f"Bearer {access_token}"
+                    else:
+                        log.warning("Access token expired, refreshing...")
+                        access_token = get_new_access_token_using_refresh_token(load_refresh_token_from_file())
+                        save_access_token(access_token)
+                        headers["Authorization"] = f"Bearer {access_token}"  # Update header with new token
+            if http_err.response.status_code==404:
+                log.error(f"You need to generate the list!!!")
+                break
+            log.error(f"Attempt {attempt + 1} failed for {url}: HTTP Error {http_err}")           
             time.sleep(2 ** attempt)                    
         except requests.exceptions.RequestException as e:
-            log.error(f"Attempt {attempt + 1} failed for {url}: {e}")
+            log.error(f"Request attempt {attempt + 1} failed for {url}: {e}")
             time.sleep(2 ** attempt)
+        except Exception as e:
+        #log.error(f"Error processing {item['name']}: {e}")
+            log.error(f"Error processing {filename.encode('utf-8')}")
+            log.error("Traceback: %s", traceback.format_exc())
     log.error(f"Failed to download {url} after {config.MAX_RETRIES} attempts.")
+    config.num_error+=1
+    if config.num_error > config.MAX_ERRORS:
+        config.stop_flag=True
     return None
 
 
@@ -89,7 +114,7 @@ def is_file_changed(item, local_file_path):
 
 def process_item(item):
     try:
-        config.progress_num += 1
+        
         config.status_str="Downloading in progress\nFile "+str(config.progress_num)+"/"+str(config.progress_tot)
         download_url = item["@microsoft.graph.downloadUrl"]
         filename = urllib.parse.unquote(item["name"],encoding='utf-8')  # Decode URL-encoded filename
@@ -107,6 +132,7 @@ def process_item(item):
                 item_download_errors.append(item)
         else:
             log.info(f"Unchanged: {filename.encode('utf-8')}")
+        config.progress_num += 1
 
     except Exception as e:
         #log.error(f"Error processing {item['name']}: {e}")
@@ -168,9 +194,12 @@ def download_the_list_of_files():
         with open('item_download_errors.json', 'w', encoding="utf8") as f:
             json.dump(item_download_errors, f, indent=2)
         log.info("Errors logged in item_download_errors.json.")
-
+    
     log.info("Download process completed.")
-    config.status_str = "Downloads completed"
+    if config.stop_flag:
+        config.status_str = "Downloads ended due to stop_flag"
+    else:
+        config.status_str = "Downloads completed"
     config.progress_num = 0
 
 if __name__ == "__main__":

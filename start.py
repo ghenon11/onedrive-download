@@ -93,6 +93,12 @@ def download_files():
         #download_the_list_of_files()
         # Start the thread
         config.stop_flag=False
+        config.progress_num=0
+        
+        progress_bar.stop()
+        progress_bar.config(mode="determinate")
+        progress_bar.config(maximum=config.progress_tot)
+        
         recording_thread = threading.Thread(target=start_download, daemon=True)
         recording_thread.start()
         
@@ -175,22 +181,10 @@ def main():
             status_text.delete('1.0',tk.END)
             status_text.insert('1.0', config.status_str)
             test=progress_bar["mode"]
-            if test == "determinate":
-                if config.progress_num>=0:
-                    progress_var.set(config.progress_num)
+            if config.progress_num>=0:
+                progress_var.set(config.progress_num)
+                if not progress_bar["maximum"] == config.progress_tot:
                     progress_bar.config(maximum=config.progress_tot)
-                # else:
-                    # if config.progress_num==-1: # generating file mode
-                        # progress_bar.config(mode="indeterminate")
-                        # time.sleep(1)
-                        # progress_bar.config(maximum=100)
-                        # progress_bar.start()
-            else:
-                if config.progress_num==0:
-                    progress_bar.stop()
-                    progress_bar.config(mode="determinate")
-                    progress_var.set(config.progress_num)
-                    progress_bar.config(maximum=100)
             time.sleep(1)
             
     # Start a thread to update the progress bar
