@@ -84,6 +84,7 @@ def download_files():
             logging.error("Traceback: %s", traceback.format_exc())
       
     try:
+        use_refresh_token_to_get_new_access_token()
         access_token = load_access_token_from_file()
         if not access_token:
             logging.error("No access token found.")
@@ -120,11 +121,12 @@ def main():
         if directory:
             download_dir_var.set(directory)
             config.OFFLINEBACKUP_PATH = download_dir_var.get()
-            messagebox.showinfo("Success", f"Download directory set to: {config.OFFLINEBACKUP_PATH}")
+            config.status_str="Success\nDownload directory set to: "+config.OFFLINEBACKUP_PATH
 
     def choose_onedrivedirectory():
         config.ONEDRIVEDIR_PATH = root_dir_var.get()
-        messagebox.showinfo("Success", f"OneDrive Root directory set to: {config.ONEDRIVEDIR_PATH}")
+        config.status_str="Success\nOneDrive Root directory set to: "+config.ONEDRIVEDIR_PATH
+       # messagebox.showinfo("Success", f"OneDrive Root directory set to: {config.ONEDRIVEDIR_PATH}")
     
     def stop_download():
         config.stop_flag = True
@@ -138,28 +140,33 @@ def main():
     root.protocol("WM_DELETE_WINDOW", confirm_close)
     
     tk.Label(root, text="OneDrive Downloader", font=("Arial", 14, "bold")).pack(pady=10)
-   
-    tk.Label(root, text="Download Directory:").pack()
-    download_dir_var = tk.StringVar(value=config.OFFLINEBACKUP_PATH)
-    tk.Entry(root, textvariable=download_dir_var, width=50).pack()
-    tk.Button(root, text="Choose Directory", command=choose_directory).pack()
     
+    tk.Button(root, text="Get Refresh and Access Tokens", command=get_refresh_and_access_tokens, width=40).pack(pady=5)
+    
+   
     tk.Label(root, text="OneDrive Root Directory:").pack()
     root_dir_var = tk.StringVar(value=config.ONEDRIVEDIR_PATH)
     tk.Entry(root, textvariable=root_dir_var, width=50).pack()
     tk.Button(root, text="Set OneDrive Root Directory", command=choose_onedrivedirectory).pack()
+    tk.Button(root, text="Generate List of All Files and Folders", command=generate_list, width=40).pack(pady=5)
     
-    status_text=tk.Text(root,width=40,height=3)
+    tk.Label(root, text="Download Directory:").pack()
+    download_dir_var = tk.StringVar(value=config.OFFLINEBACKUP_PATH)
+    tk.Entry(root, textvariable=download_dir_var, width=50).pack()
+    tk.Button(root, text="Choose Directory", command=choose_directory).pack()
+    tk.Button(root, text="Download Files from Generated List", command=download_files, width=40).pack(pady=5)
+    
+    
+    status_text=tk.Text(root,width=40,height=4)
     status_text.insert(tk.END, config.status_str)
     status_text.pack(pady=10)
     progress_var = tk.DoubleVar()
     progress_bar = ttk.Progressbar(root, variable=progress_var, length=300)
     progress_bar.pack(pady=10)
        
-    tk.Button(root, text="Get Refresh and Access Tokens", command=get_refresh_and_access_tokens, width=40).pack(pady=5)
-    tk.Button(root, text="Get New Access Token", command=use_refresh_token_to_get_new_access_token, width=40).pack(pady=5)
-    tk.Button(root, text="Generate List of All Files and Folders", command=generate_list, width=40).pack(pady=5)
-    tk.Button(root, text="Download Files from Generated List", command=download_files, width=40).pack(pady=5)
+    #tk.Button(root, text="Get New Access Token", command=use_refresh_token_to_get_new_access_token, width=40).pack(pady=5)
+    
+    
     tk.Button(root, text="Stop Processing", command=stop_download, fg="red").pack()
     tk.Button(root, text="Exit", command=exit_button, width=40, bg="red", fg="white").pack(pady=10)
     

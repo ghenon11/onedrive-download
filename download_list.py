@@ -6,16 +6,18 @@ import sys
 import os
 import time
 import urllib.parse
+import threading
 from pathlib import Path
 from datetime import datetime, timezone
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 from dateutil import parser as datetimeparser
-from onedrive_authorization_utils import load_access_token_from_file,load_refresh_token_from_file,get_new_access_token_using_refresh_token
+from onedrive_authorization_utils import load_access_token_from_file,load_refresh_token_from_file,get_new_access_token_using_refresh_token,save_access_token
 from filedate import File
 
 import config
 
 log = logging.getLogger(__name__)
+lock = threading.Lock()
 item_download_errors = []
 
 def load_file_list() -> list:
@@ -34,10 +36,9 @@ def download_file_by_url(url, local_file_path):
                 f.write(r.content)
             return local_file_path
         except requests.exceptions.HTTPError as http_err:
-            log.error(f"Attempt {attempt + 1} failed for {url}: HTTP ERROR {http_err}")
-            if http_err.response.status_code == 404:
-                access_token=get_new_access_token_using_refresh_token(load_refresh_token_from_file())
-                logging.info("Access Token refreshed, retrying...")
+            log.error(f"HTTP error {http_err.response.status_code}: {http_err}")
+            log.error(f"Attempt {attempt + 1} failed for {url}: HTTP Error {http_err}")
+            time.sleep(2 ** attempt)                    
         except requests.exceptions.RequestException as e:
             log.error(f"Attempt {attempt + 1} failed for {url}: {e}")
             time.sleep(2 ** attempt)
@@ -72,9 +73,8 @@ def update_file_dates(file_path, item):
         file = File(file_path)
         file.set(created=dt_cd, modified=dt_md)
     except Exception as e:
-        log.error(f"Failed to update creation date for {file_path}: {e}")
-    log.debug("File %s dates set to %s", file_path, iso_modifieddate)
-
+        log.error(f"Failed to update creation date : {e}")
+    log.debug(f"File {file_path.encode('utf-8')} dates set to {iso_modifieddate}")
 
 def is_file_changed(item, local_file_path):
     file_path = Path(local_file_path)
@@ -89,13 +89,12 @@ def is_file_changed(item, local_file_path):
 
 def process_item(item):
     try:
-        if config.stop_flag:
-            return
         config.progress_num += 1
         config.status_str="Downloading in progress\nFile "+str(config.progress_num)+"/"+str(config.progress_tot)
         download_url = item["@microsoft.graph.downloadUrl"]
-        filename = urllib.parse.unquote(item["name"])  # Decode URL-encoded filename
-        log.debug("Processing %s",filename)
+        filename = urllib.parse.unquote(item["name"],encoding='utf-8')  # Decode URL-encoded filename
+       # filename = filename.encode('utf-8')
+        log.debug(f"Processing {filename.encode('utf-8')}")
         local_folder_path = get_local_download_folder_by_item(item)
         local_file_path = os.path.join(local_folder_path, filename)
         ensure_local_path_exists(local_folder_path)
@@ -103,44 +102,76 @@ def process_item(item):
             downloaded_file = download_file_by_url(download_url, local_file_path)
             if downloaded_file:
                 update_file_dates(local_file_path, item)
-                log.info("Downloaded: %s", local_file_path)
+                log.info(f"Downloaded: {local_file_path.encode('utf-8')}")
             else:
                 item_download_errors.append(item)
         else:
-            log.info("Unchanged: %s", filename)
+            log.info(f"Unchanged: {filename.encode('utf-8')}")
+
     except Exception as e:
-        log.error(f"Error processing {item['name']}: {e}")
+        #log.error(f"Error processing {item['name']}: {e}")
+        log.error(f"Error processing {filename.encode('utf-8')}")
         log.error("Traceback: %s", traceback.format_exc())
         item_download_errors.append(item)
 
 def safe_submit(executor, func, item):
-    """Submit a task only if there is enough disk space."""
-    if not config.has_enough_space(get_local_download_folder_by_item(item)) and config.stop_flag==False:
+    """Submit a task only if there is enough disk space and stop_flag is False."""
+    if config.stop_flag:
+        log.warning("Stop flag is set. Skipping new downloads.")
+        return None  # Prevent new tasks from being submitted
+    
+    if not config.has_enough_space(get_local_download_folder_by_item(item)):
         log.error("Low disk space. Stopping downloads...")
-        config.stop_flag=True  # Wait before checking again
+        config.stop_flag = True  # Set the stop flag to prevent further submissions
+        return None
+    
     return executor.submit(func, item)
 
 def download_the_list_of_files():
-   
-    
+    log.info("Download process Started.")
+    config.status_str = "Downloads start"
     items = load_file_list()
-    config.status_str="Downloads start"
-    config.progress_tot=len(items)
-    config.progress_num=0
+
+    if not items or len(items) == 0:
+        log.error("No items in file")
+        return
+
+    config.progress_tot = len(items)
+    config.progress_num = 0
     log.info("Starting download of %s file(s).", len(items))
-    log.debug("First one is %s",get_local_download_folder_by_item(items[0]))
-    
+    log.debug("First one is %s", get_local_download_folder_by_item(items[0]))
+
     with ThreadPoolExecutor(max_workers=config.MAX_WORKERS) as executor:
-        futures = {safe_submit(executor, process_item, item): item for item in items}
-        for future in as_completed(futures):
-            future.result()
+        try:
+            futures = {}
+            index = 0
+            while index < len(items) and not config.stop_flag:
+                item = items[index]
+                future = safe_submit(executor, process_item, item)
+                if future:
+                    futures[future] = item
+                index += 1
+            for future in as_completed(futures):
+                if config.stop_flag:
+                    log.warning("Stop flag detected. Cancelling remaining downloads.")
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    break
+                try:
+                    future.result()
+                except Exception as e:
+                    log.error(f"Error in download executor: {e}")
+                    log.error("Traceback: %s", traceback.format_exc())
+        except Exception as e:
+            log.error(f"Unexpected error during download process: {e}")
+    
     if item_download_errors:
         with open('item_download_errors.json', 'w', encoding="utf8") as f:
             json.dump(item_download_errors, f, indent=2)
         log.info("Errors logged in item_download_errors.json.")
+
     log.info("Download process completed.")
-    config.status_str="Downloads completed"
-    config.progress_num=0
+    config.status_str = "Downloads completed"
+    config.progress_num = 0
 
 if __name__ == "__main__":
     download_the_list_of_files()

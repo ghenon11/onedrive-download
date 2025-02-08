@@ -31,13 +31,18 @@ def get_folder_endpoint(folder: str) -> str:
 
 def format_endpoint(endpoint: str) -> str:
     """Normalize and validate the endpoint URL to prevent 404 errors."""
+    log.debug("endpoint in %s",endpoint)
     endpoint = endpoint.strip()  # Remove leading/trailing spaces
     decoded_url = urllib.parse.unquote(endpoint)  # Decode once
-    while decoded_url != endpoint:  # Check if further decoding is needed
+    attempts=0
+    while decoded_url != endpoint and attempts<5:  # Check if further decoding is needed
         endpoint = decoded_url
         decoded_url = urllib.parse.unquote(endpoint)
-        
-    #endpoint = urllib.parse.urljoin(endpoint)
+        attempts += 1
+    #Since # is a fragment identifier and isn't sent in HTTP requests, you need to encode it as %23 if you want it to be treated as part of the query string.   
+    endpoint = endpoint.replace("#","%23")
+    log.debug("endpoint out %s",endpoint)
+    
     return endpoint
 
 def fetch_folder_contents(endpoint: str, access_token: str):
@@ -46,7 +51,7 @@ def fetch_folder_contents(endpoint: str, access_token: str):
     headers = {"Authorization": f"Bearer {access_token}"}
     attempts = 0
 
-    while attempts < 3:
+    while attempts < 3 and not config.stop_flag:
         try:
             response = requests.get(endpoint, headers=headers)
             response.encoding = "utf-8"
@@ -63,8 +68,11 @@ def fetch_folder_contents(endpoint: str, access_token: str):
                 log.error(f"Error 404: The endpoint {endpoint} was not found. Check if the path is correct.")
                 break  # Don't retry if the endpoint is invalid
             else:
-                log.error(f"HTTP error {response.status_code}: {e}, attempt {attempts + 1}")
-                break  # Stop retrying for non-recoverable HTTP errors (e.g., 403, 404)
+                if attempts<2:
+                    log.error(f"HTTP error {response.status_code}: {e}, attempt {attempts + 1}")
+                else:
+                    log.warning(f"HTTP error {response.status_code}: {e}, attempt {attempts + 1}")
+               # break  # Stop retrying for non-recoverable HTTP errors (e.g., 403, 404)
 
         except requests.exceptions.RequestException as e:
             log.error(f"Request error: {e}, attempt {attempts + 1}")
@@ -93,8 +101,12 @@ def process_one_folder(access_token: str):
             
             for item in content.get("value", []):
                 is_folder = "folder" in item
-                log.info(f"Adding {item['name']} from {current_folder} {'[FOLDER]' if is_folder else '[FILE]'}")
-                
+               # log.info(f"Adding {item['name']} from {current_folder} {'[FOLDER]' if is_folder else '[FILE]'}")
+                try:
+                    log.info(f"Adding %s from %s {'[FOLDER]' if is_folder else '[FILE]'}",item['name'].encode("utf-8"),current_folder)
+                except Exception as exc:
+                    log.error(f"Error when processing folder: {exc}")
+                    break
                 if is_folder:
                     folder_list.append(item)
                     config.folder_queue.put(item["parentReference"]["path"] + "/" + item["name"])
@@ -112,6 +124,7 @@ def process_one_folder(access_token: str):
     except Exception as exc:
         log.error(f"Error when processing folder: {exc}")
         
+        
     return current_folder, folder_list, file_list
 
 
@@ -124,35 +137,38 @@ def process_folders(access_token: str):
 
     log.debug(f"Starting from root folder: {root_folder}")
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=config.MAX_WORKERS) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=config.MAX_WORKERS_GEN) as executor:
         futures = set()
 
-        while not config.folder_queue.empty() or futures:
+        while (not config.folder_queue.empty() or futures) and not config.stop_flag:
             
             log.debug(f"Queue length %s",config.folder_queue.qsize())
             # Submit new folder tasks while workers are available
-            while len(futures) < config.MAX_WORKERS and not config.folder_queue.empty() and not config.stop_flag:
-                log.debug(f"Submit new executor,len(futures) %s",len(futures))
-                future = executor.submit(process_one_folder, access_token)
-                futures.add(future)  # Track running futures
-
-            # Process completed tasks (wait with timeout to avoid deadlock)
-            done, futures = concurrent.futures.wait(futures, timeout=5, return_when=concurrent.futures.FIRST_COMPLETED)
-
-            for future in done:
+            while len(futures) < config.MAX_WORKERS_GEN and not config.folder_queue.empty() and not config.stop_flag:
                 try:
-                    with lock:
-                        current_folder, new_folders, new_files = future.result()
-                        folder_list.extend(new_folders)
-                        file_list.extend(new_files)
-                        config.status_str = f"Identifying files...\n{len(file_list)} found so far, {config.folder_queue.qsize()} folders remaining"
-                        log.debug(f"Processed folder: {current_folder}")
-                except Exception as exc:
-                    log.error(f"Error processing folder: {exc}")
+                    log.debug(f"Submit new executor,len(futures) %s",len(futures))
+                    future = executor.submit(process_one_folder, access_token)
+                    futures.add(future)  # Track running futures
+                except TimeoutError:
+                    log.error('Time out submitting')
+            try:
+                # Process completed tasks (wait with timeout to avoid deadlock)
+                done, futures = concurrent.futures.wait(futures, timeout=config.TIMEOUT, return_when=concurrent.futures.FIRST_COMPLETED)
 
+                for future in done:
+                        with lock:
+                            current_folder, new_folders, new_files = future.result()
+                            folder_list.extend(new_folders)
+                            file_list.extend(new_files)
+                            config.status_str = f"Identifying files: \n{len(file_list)} files found so far,\n{config.folder_queue.qsize()} folders remaining"
+                            log.debug(f"Processed folder: {current_folder}")            
                 # Remove completed future
                 futures.discard(future)
-
+            except TimeoutError:
+                log.error('Time out submitting')
+            except Exception as exc:
+                log.error(f"Error processing folder: {exc}")
+                    
         # Final cleanup
         executor.shutdown(wait=True)
 

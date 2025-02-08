@@ -24,3 +24,4 @@ logs/OneDriveOfflineBackup.log.9
 *.old
 *.bad
 *.json
+/logs
