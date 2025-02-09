@@ -191,6 +191,7 @@ def generate_list_of_all_files_and_folders(access_token):
     with open("folder_list.json", "w", encoding="utf-8") as f:
         json.dump(folder_list, f, indent=2)
     
+    config.progress_num=0
     log.info("File and folder lists have been saved.")
     log.info(f"Total Files: {len(file_list)}, Total Folders: {len(folder_list)}")
     log.info("Done.")

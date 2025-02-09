@@ -1,8 +1,7 @@
-import tkinter as tk
-from tkinter import ttk
+import customtkinter as ctk
 from tkinter import messagebox, filedialog
-import logging
-import os,threading,time,traceback
+import logging, threading, traceback, time
+from PIL import Image
 import config
 from onedrive_authorization_utils import (
     save_refresh_token, load_access_token_from_file,
@@ -12,190 +11,190 @@ from onedrive_authorization_utils import (
 from generate_list import generate_list_of_all_files_and_folders
 from download_list import download_the_list_of_files
 
+class OneDriveDownloader(ctk.CTk):
+    def __init__(self):
+        super().__init__()
+        self.title("OneDrive Offline Backup")
+        # Set the dimensions of the window
+        width = 600
+        height = 600
 
-def get_refresh_and_access_tokens():
-    try:
-        logging.info("Starting token procurement process.")
-        access_token, refresh_token, name = procure_new_tokens_from_user()
-        save_refresh_token(refresh_token)
-        messagebox.showinfo("Success", f"Hello {name}! Tokens have been saved securely.")
-        logging.info("Tokens saved successfully.")
-    except Exception as e:
-        logging.error(f"Error obtaining tokens: {e}")
-        messagebox.showerror("Error", f"Failed to obtain tokens: {str(e)}")
+        # Get the screen dimensions
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
 
-def use_refresh_token_to_get_new_access_token():
-    try:
-        refresh_token = load_refresh_token_from_file()
-        if refresh_token is None:
-            logging.error("No refresh token found.")
-            messagebox.showerror("Error", "No refresh token found. Please generate a new one.")
-            return
-        new_access_token = get_new_access_token_using_refresh_token(refresh_token)
-        save_access_token(new_access_token)
-        logging.info("New access token saved successfully.")
-        config.status_str="New access token saved successfully."
-    except Exception as e:
-        logging.error(f"Error refreshing access token: {e}")
-        messagebox.showerror("Error", f"Failed to refresh access token: {str(e)}")
+        # Calculate the position to center the window
+        x = (screen_width / 2) - (width / 2)
+        y = (screen_height / 2) - (height / 2)
 
-def generate_list():
-    global progress_bar
-    
-    def start_generate():
-        try:
-            generate_list_of_all_files_and_folders(access_token=access_token)
-        except Exception as e:
-            logging.error(f"Error in start generate list: {e}")
-            logging.error("Traceback: %s", traceback.format_exc())
-            
-    try:
-        use_refresh_token_to_get_new_access_token()
-        access_token = load_access_token_from_file()
-        if not access_token:
-            logging.error("No access token found.")
-            messagebox.showerror("Error", "No access token found. Please authenticate first.")
-            return
+        # Set the geometry of the window
+        self.geometry(f'{width}x{height}+{int(x)}+{int(y)}')
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+        self.protocol("WM_DELETE_WINDOW", self.confirm_close)
         
+        self.main_frame = ctk.CTkFrame(self)
+        self.main_frame.grid_columnconfigure(0, weight=1)
+        self.main_frame.grid_rowconfigure(0, weight=1)
+        self.main_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+        
+        self.init_frame = ctk.CTkFrame(self.main_frame)
+        # Load and set background image
+        self.bg_photo=ctk.CTkImage(light_image=Image.open(config.BG_IMG), size=(self.init_frame.cget("width")-10, (self.init_frame.cget("width")-10)*200/250))  # Adjust size 
+        self.bg_label = ctk.CTkLabel(self.init_frame, image=self.bg_photo, text="",compound="left").grid(row=0, column=1, rowspan=2)
+        ctk.CTkLabel(self.init_frame, text="OneDrive OfflineBackup", font=("Arial", 16, "bold")).grid(row=0, column=0, pady=5)
+        ctk.CTkButton(self.init_frame, text="Get Refresh and Access Tokens", command=self.get_refresh_and_access_tokens).grid(row=1, column=0, pady=5)
+        self.init_frame.grid_rowconfigure(0, weight=1)
+        self.init_frame.grid_columnconfigure(0, weight=1)
+        self.init_frame.grid(row=0, column=0, padx=10, pady=5, sticky="nsew")
+        
+        
+        self.genlist_frame = ctk.CTkFrame(self.main_frame)
+        self.genlist_frame.grid_rowconfigure(0, weight=1)
+        self.genlist_frame.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(self.genlist_frame, text="Set OneDrive Starting Directory:").grid(row=0, column=0, sticky="w")
+        self.root_dir_var = ctk.StringVar(value=config.ONEDRIVEDIR_PATH)
+        ctk.CTkEntry(self.genlist_frame, textvariable=self.root_dir_var, width=350).grid(row=1, column=0, pady=5,padx=5)
+        ctk.CTkButton(self.genlist_frame, text="Set Root Directory", command=self.set_onedrive_directory).grid(row=1, column=1, pady=5,padx=5)
+        ctk.CTkButton(self.genlist_frame, text="Generate List of Files", command=self.generate_list).grid(row=2, column=0,  pady=5,columnspan=2)
+        self.genlist_frame.grid(row=1, column=0, padx=10, pady=5, sticky="nsew")
+        
+        self.download_frame = ctk.CTkFrame(self.main_frame)
+        self.download_frame.grid_rowconfigure(0, weight=1)
+        self.download_frame.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(self.download_frame, text="Set Download Directory:").grid(row=0, column=0, sticky="w")
+        self.download_dir_var = ctk.StringVar(value=config.OFFLINEBACKUP_PATH)
+        ctk.CTkEntry(self.download_frame, textvariable=self.download_dir_var, width=350).grid(row=1, column=0, pady=5,padx=5)
+        ctk.CTkButton(self.download_frame, text="Choose Directory", command=self.choose_directory).grid(row=1, column=1, pady=5,padx=5)
+        ctk.CTkButton(self.download_frame, text="Download Files", command=self.download_files).grid(row=2, column=0, columnspan=2,pady=5)
+        self.download_frame.grid(row=2, column=0, padx=10, pady=5, sticky="nsew")
+        
+        self.status_frame = ctk.CTkFrame(self.main_frame)
+        self.status_frame.grid_rowconfigure(0, weight=1)
+        self.status_frame.grid_columnconfigure(0, weight=1)
+        #self.status_text = ctk.CTkTextbox(self.status_frame, width=400, height=80)
+        self.status_text = ctk.CTkTextbox(self.status_frame, height=80)
+        self.status_text.grid(row=0, column=0, pady=10,padx=5,sticky="nsew") 
+        self.progress_var = ctk.DoubleVar()
+        self.progress_bar = ctk.CTkProgressBar(self.status_frame, variable=self.progress_var, width=350)
+        self.progress_bar.grid(row=1, column=0, pady=10)
+        self.progress_bar.set(0)
+        self.status_frame.grid(row=3, column=0, padx=10, pady=5, sticky="nsew")
+
+        self.end_frame = ctk.CTkFrame(self.main_frame)
+        self.end_frame.grid_columnconfigure(0, weight=1)
+        ctk.CTkButton(self.end_frame, text="Stop", fg_color="red", command=self.stop_download).grid(row=0, column=0, pady=5)
+        ctk.CTkButton(self.end_frame, text="Exit", fg_color="red", command=self.exit_app).grid(row=1, column=0, pady=5)
+        self.end_frame.grid(row=4, column=0, padx=10, pady=5, sticky="nsew")
+
+       # self.center_window(self)
+        self.update_ui()
+
+    def center_window(window):
+        window.update_idletasks()
+        width = window.winfo_width()
+        height = window.winfo_height()
+        screen_width = window.winfo_screenwidth()
+        screen_height = window.winfo_screenheight()
+        x = (screen_width - width) // 2
+        y = (screen_height - height) // 2
+        window.geometry(f"{width}x{height}+{x}+{y}")
+    
+    def update_ui(self):
+        self.status_text.delete("1.0", "end")
+        self.status_text.insert("1.0", config.status_str)
+        if config.progress_num >= 0:
+            if self.progress_bar.cget("mode")=="indeterminate":
+                self.progress_bar.stop()
+                self.progress_bar.configure(mode="determinate")
+            self.progress_var.set(config.progress_num / (config.progress_tot or 1))
+        self.after(1000, self.update_ui)  # Update every second
+
+    def get_refresh_and_access_tokens(self):
+        try:
+            access_token, refresh_token, name = procure_new_tokens_from_user()
+            save_refresh_token(refresh_token)
+            messagebox.showinfo("Success", f"Hello {name}! Tokens saved successfully.")
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    def use_refresh_token_to_get_new_access_token(self):
+        try:
+            refresh_token = load_refresh_token_from_file()
+            if not refresh_token:
+                messagebox.showerror("Error", "No refresh token found.")
+                return
+            new_access_token = get_new_access_token_using_refresh_token(refresh_token)
+            save_access_token(new_access_token)
+            config.status_str = "New access token saved successfully."
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    def generate_list(self):
         config.stop_flag=False
         config.progress_num=-1
-        progress_bar.config(mode="indeterminate")
-        progress_bar.config(maximum=100)
-        progress_bar.start()
-        # generate_list_of_all_files_and_folders(access_token=access_token)
-        # messagebox.showinfo("Success", "File list generated successfully.")
-        # logging.info("File list generation completed.")
-        recording_thread = threading.Thread(target=start_generate, daemon=True)
-        recording_thread.start()
         
-    except Exception as e:
-        logging.error(f"Error generating file list: {e}")
-        logging.error("Traceback: %s", traceback.format_exc())
-        messagebox.showerror("Error", f"Failed to generate file list: {str(e)}")
+        self.progress_bar.configure(mode="indeterminate")
 
-def download_files():
-        
-    #Launch process_recording in a separate thread.
-    def start_download():
+        self.progress_bar.start()
+        threading.Thread(target=self._generate_list, daemon=True).start()
+    
+    def _generate_list(self):
         try:
-            download_the_list_of_files()
+            self.use_refresh_token_to_get_new_access_token()
+            access_token = load_access_token_from_file()
+            if not access_token:
+                messagebox.showerror("Error", "No access token found.")
+                return
+            generate_list_of_all_files_and_folders(access_token)
         except Exception as e:
-            logging.error(f"Error in start download: {e}")
-            logging.error("Traceback: %s", traceback.format_exc())
-      
-    try:
-        use_refresh_token_to_get_new_access_token()
-        access_token = load_access_token_from_file()
-        if not access_token:
-            logging.error("No access token found.")
-            messagebox.showerror("Error", "No access token found. Please authenticate first.")
-            return
-        #download_the_list_of_files()
-        # Start the thread
+            messagebox.showerror("Error", str(e))
+    
+    def download_files(self):
         config.stop_flag=False
         config.progress_num=0
-        
-        progress_bar.stop()
-        progress_bar.config(mode="determinate")
-        progress_bar.config(maximum=config.progress_tot)
-        
-        recording_thread = threading.Thread(target=start_download, daemon=True)
-        recording_thread.start()
-        
-    except Exception as e:
-        logging.error(f"Error downloading files: {e}")
-        messagebox.showerror("Error", f"Failed to download files: {str(e)}")
-
-def main():
+        self.progress_bar.stop()
+        self.progress_bar.configure(mode="determinate")
+        threading.Thread(target=self._download_files, daemon=True).start()
     
-    global status_text,progress_bar
-    
-    def exit_button():
+    def _download_files(self):
         try:
-            stop_download()
-            root.quit()
+            self.use_refresh_token_to_get_new_access_token()
+            access_token = load_access_token_from_file()
+            if not access_token:
+                messagebox.showerror("Error", "No access token found.")
+                return
+            download_the_list_of_files()
         except Exception as e:
-            logging.error("Error when exiting", str(e))
+            messagebox.showerror("Error", str(e))
     
-    def confirm_close():
-        result = messagebox.askyesno("Confirm Close", "Are you sure you want to close?")
-        if result:
-            exit_button()
-
-    def choose_directory():
-        directory = filedialog.askdirectory(title="Choose Download Directory", initialdir=config.OFFLINEBACKUP_PATH)
+    def choose_directory(self):
+        directory = filedialog.askdirectory()
         if directory:
-            download_dir_var.set(directory)
-            config.OFFLINEBACKUP_PATH = download_dir_var.get()
-            config.status_str="Success\nDownload directory set to: "+config.OFFLINEBACKUP_PATH
-
-    def choose_onedrivedirectory():
-        config.ONEDRIVEDIR_PATH = root_dir_var.get()
-        config.status_str="Success\nOneDrive Root directory set to: "+config.ONEDRIVEDIR_PATH
-       # messagebox.showinfo("Success", f"OneDrive Root directory set to: {config.ONEDRIVEDIR_PATH}")
+            self.download_dir_var.set(directory)
+            config.OFFLINEBACKUP_PATH = directory
+            config.status_str = f"Download directory set to: {directory}"
     
-    def stop_download():
+    def set_onedrive_directory(self):
+        config.ONEDRIVEDIR_PATH = self.root_dir_var.get()
+        config.status_str = f"OneDrive Root directory set to: {config.ONEDRIVEDIR_PATH}"
+    
+    def stop_download(self):
         config.stop_flag = True
-        logging.info("Stopping identification and new downloads...")
-        #messagebox.showinfo("Stopping", "New Identification and download have been stopped.")
-        
-   
-    root = tk.Tk()
-    root.title("OneDrive Downloader")
-    root.geometry("400x600")
-    root.protocol("WM_DELETE_WINDOW", confirm_close)
+        config.status_str = "Stopping downloads..."
     
-    tk.Label(root, text="OneDrive Downloader", font=("Arial", 14, "bold")).pack(pady=10)
+    def confirm_close(self):
+        if messagebox.askyesno("Confirm Close", "Are you sure you want to close?"):
+            self.exit_app()
     
-    tk.Button(root, text="Get Refresh and Access Tokens", command=get_refresh_and_access_tokens, width=40).pack(pady=5)
-    
-   
-    tk.Label(root, text="OneDrive Root Directory:").pack()
-    root_dir_var = tk.StringVar(value=config.ONEDRIVEDIR_PATH)
-    tk.Entry(root, textvariable=root_dir_var, width=50).pack()
-    tk.Button(root, text="Set OneDrive Root Directory", command=choose_onedrivedirectory).pack()
-    tk.Button(root, text="Generate List of All Files and Folders", command=generate_list, width=40).pack(pady=5)
-    
-    tk.Label(root, text="Download Directory:").pack()
-    download_dir_var = tk.StringVar(value=config.OFFLINEBACKUP_PATH)
-    tk.Entry(root, textvariable=download_dir_var, width=50).pack()
-    tk.Button(root, text="Choose Directory", command=choose_directory).pack()
-    tk.Button(root, text="Download Files from Generated List", command=download_files, width=40).pack(pady=5)
-    
-    
-    status_text=tk.Text(root,width=40,height=4)
-    status_text.insert(tk.END, config.status_str)
-    status_text.pack(pady=10)
-    progress_var = tk.DoubleVar()
-    progress_bar = ttk.Progressbar(root, variable=progress_var, length=300)
-    progress_bar.pack(pady=10)
-       
-    #tk.Button(root, text="Get New Access Token", command=use_refresh_token_to_get_new_access_token, width=40).pack(pady=5)
-    
-    
-    tk.Button(root, text="Stop Processing", command=stop_download, fg="red").pack()
-    tk.Button(root, text="Exit", command=exit_button, width=40, bg="red", fg="white").pack(pady=10)
-    
-    def update_progress_bar():
-        while True:
-            status_text.delete('1.0',tk.END)
-            status_text.insert('1.0', config.status_str)
-            test=progress_bar["mode"]
-            if config.progress_num>=0:
-                progress_var.set(config.progress_num)
-                if not progress_bar["maximum"] == config.progress_tot:
-                    progress_bar.config(maximum=config.progress_tot)
-            time.sleep(1)
-            
-    # Start a thread to update the progress bar
-    thread = threading.Thread(target=update_progress_bar, daemon=True)
-    thread.start()
+    def exit_app(self):
+        self.stop_download()
+        self.quit()
 
-    root.mainloop()
-    
 if __name__ == "__main__":
     config.initialize()
     config.init_logging()
-    logging = logging.getLogger(__name__)
-    print(f"Logging in file {config.LOG_FILE}")
-    main()
+    logging.getLogger(__name__)
+    logging.info("Application starts")
+    app = OneDriveDownloader()
+    app.mainloop()

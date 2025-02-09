@@ -3,7 +3,7 @@ from logging.handlers import RotatingFileHandler
 from queue import Queue
 
 def initialize(): 
-    global OFFLINEBACKUP_PATH, ONEDRIVEDIR_PATH, MAX_RETRIES,MAX_WORKERS,MAX_WORKERS_GEN,INSTALL_DIR,stop_flag,num_error,MAX_ERRORS,status_str,progress_num,progress_tot,MIN_FREE_SPACE_BYTES,LOG_FILE,LOG_LEVEL,LOG_BACKUP_COUNT,TIMEOUT,folder_queue
+    global OFFLINEBACKUP_PATH, ONEDRIVEDIR_PATH, MAX_RETRIES,MAX_WORKERS,MAX_WORKERS_GEN,INSTALL_DIR,BG_IMG,stop_flag,num_error,MAX_ERRORS,status_str,progress_num,progress_tot,MIN_FREE_SPACE_BYTES,LOG_FILE,LOG_LEVEL,LOG_BACKUP_COUNT,TIMEOUT,folder_queue
     INSTALL_DIR=get_main_dir()
     OFFLINEBACKUP_PATH = os.path.join(INSTALL_DIR, "Downloads")
     ONEDRIVEDIR_PATH = "/Pictures"
@@ -19,6 +19,7 @@ def initialize():
     progress_tot=10000
     MIN_FREE_SPACE_BYTES = 5 * 1024 * 1024 * 1024  # 1GB
     LOG_FILE = os.path.join(INSTALL_DIR,"logs", "OneDriveOfflineBackup.log")
+    BG_IMG = os.path.join(INSTALL_DIR,"imgs","backup.png")
     LOG_BACKUP_COUNT = 10  # Keep up to 10 backup logs
     TIMEOUT = 20
     folder_queue = Queue()
