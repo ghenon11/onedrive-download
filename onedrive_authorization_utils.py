@@ -2,7 +2,6 @@ import msal
 import webbrowser
 import requests 
 import json
-from coloring import *
 import os 
 import logging
 
@@ -50,7 +49,8 @@ def load_access_token_from_file() -> str:
         with open("access_token.txt") as f:
             line = f.readline()
         return line
-    except:
+    except Exception as e:
+        log.error(f"Unexpected error during load access token: {e}")
         return None 
 
 def load_refresh_token_from_file() -> str:
@@ -58,8 +58,9 @@ def load_refresh_token_from_file() -> str:
         with open("refresh_token.txt") as f:
             line = f.readline()
         return line
-    except:
-        return None 
+    except Exception as e:
+        log.error(f"Unexpected error during load refresh token: {e}")
+    return None
 
 def save_access_token(token:str):
     with open("access_token.txt", "w") as f:

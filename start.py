@@ -1,8 +1,10 @@
 import customtkinter as ctk
+import tkinter as tk
 from tkinter import messagebox, filedialog
 import logging, threading, traceback, time
 from PIL import Image
-import config
+
+import config,utils
 from onedrive_authorization_utils import (
     save_refresh_token, load_access_token_from_file,
     procure_new_tokens_from_user, get_new_access_token_using_refresh_token,
@@ -11,13 +13,16 @@ from onedrive_authorization_utils import (
 from generate_list import generate_list_of_all_files_and_folders
 from download_list import download_the_list_of_files
 
+__author__ = "Guillaume HENON"
+__version__ = "0.2"
+
 class OneDriveDownloader(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("OneDrive Offline Backup")
         # Set the dimensions of the window
         width = 600
-        height = 600
+        height = 650
 
         # Get the screen dimensions
         screen_width = self.winfo_screenwidth()
@@ -32,6 +37,7 @@ class OneDriveDownloader(ctk.CTk):
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
         self.protocol("WM_DELETE_WINDOW", self.confirm_close)
+        self.iconphoto(True, tk.PhotoImage(file=config.BG_IMG))
         
         self.main_frame = ctk.CTkFrame(self)
         self.main_frame.grid_columnconfigure(0, weight=1)
@@ -41,9 +47,10 @@ class OneDriveDownloader(ctk.CTk):
         self.init_frame = ctk.CTkFrame(self.main_frame)
         # Load and set background image
         self.bg_photo=ctk.CTkImage(light_image=Image.open(config.BG_IMG), size=(self.init_frame.cget("width")-10, (self.init_frame.cget("width")-10)*200/250))  # Adjust size 
-        self.bg_label = ctk.CTkLabel(self.init_frame, image=self.bg_photo, text="",compound="left").grid(row=0, column=1, rowspan=2)
-        ctk.CTkLabel(self.init_frame, text="OneDrive OfflineBackup", font=("Arial", 16, "bold")).grid(row=0, column=0, pady=5)
-        ctk.CTkButton(self.init_frame, text="Get Refresh and Access Tokens", command=self.get_refresh_and_access_tokens).grid(row=1, column=0, pady=5)
+        self.bg_label = ctk.CTkLabel(self.init_frame, image=self.bg_photo, text="",compound="left").grid(row=0, column=1, rowspan=3)
+        ctk.CTkLabel(self.init_frame, text="ONEDRIVE OFFLINE BACKUP", font=("Roboto", 24, "bold"),text_color="#1565c0").grid(row=0, column=0, pady=5)
+        ctk.CTkLabel(self.init_frame, text="One time setup: " ,anchor="s",justify="right").grid(row=1, column=0,sticky="sw")
+        ctk.CTkButton(self.init_frame, text="Get Tokens", command=self.get_refresh_and_access_tokens).grid(row=2, column=0, padx=5,pady=5,sticky="w")
         self.init_frame.grid_rowconfigure(0, weight=1)
         self.init_frame.grid_columnconfigure(0, weight=1)
         self.init_frame.grid(row=0, column=0, padx=10, pady=5, sticky="nsew")
@@ -86,6 +93,9 @@ class OneDriveDownloader(ctk.CTk):
         ctk.CTkButton(self.end_frame, text="Stop", fg_color="red", command=self.stop_download).grid(row=0, column=0, pady=5)
         ctk.CTkButton(self.end_frame, text="Exit", fg_color="red", command=self.exit_app).grid(row=1, column=0, pady=5)
         self.end_frame.grid(row=4, column=0, padx=10, pady=5, sticky="nsew")
+        
+        spec_text=f"{__author__} - gui.henon@gmail.com - Version {__version__} - 2025"
+        ctk.CTkLabel(self.main_frame, text=spec_text, font=("Arial", 9),anchor="e",justify="right").grid(row=5, column=0, sticky="ne")
 
        # self.center_window(self)
         self.update_ui()
@@ -107,7 +117,8 @@ class OneDriveDownloader(ctk.CTk):
             if self.progress_bar.cget("mode")=="indeterminate":
                 self.progress_bar.stop()
                 self.progress_bar.configure(mode="determinate")
-            self.progress_var.set(config.progress_num / (config.progress_tot or 1))
+            progress_ratio=config.progress_num / (config.progress_tot or 1)
+            self.progress_var.set(progress_ratio)
         self.after(1000, self.update_ui)  # Update every second
 
     def get_refresh_and_access_tokens(self):
@@ -153,6 +164,7 @@ class OneDriveDownloader(ctk.CTk):
     def download_files(self):
         config.stop_flag=False
         config.progress_num=0
+        config.restart=0
         self.progress_bar.stop()
         self.progress_bar.configure(mode="determinate")
         threading.Thread(target=self._download_files, daemon=True).start()
@@ -161,6 +173,7 @@ class OneDriveDownloader(ctk.CTk):
         try:
             self.use_refresh_token_to_get_new_access_token()
             access_token = load_access_token_from_file()
+            config.accesstoken=access_token
             if not access_token:
                 messagebox.showerror("Error", "No access token found.")
                 return
@@ -189,11 +202,12 @@ class OneDriveDownloader(ctk.CTk):
     
     def exit_app(self):
         self.stop_download()
+        logging.info("Exiting Application")
         self.quit()
 
 if __name__ == "__main__":
     config.initialize()
-    config.init_logging()
+    utils.init_logging()
     logging.getLogger(__name__)
     logging.info("Application starts")
     app = OneDriveDownloader()

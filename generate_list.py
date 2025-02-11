@@ -1,21 +1,24 @@
 import requests
 import json
-import logging
+import shutil,time
+import logging,traceback
 import threading
 from queue import Queue,Empty
 import urllib.parse
-from urllib.parse import quote
+from urllib.parse import quote,urlparse,urlunparse
+
 import concurrent.futures
 from onedrive_authorization_utils import (
     procure_new_tokens_from_user, load_access_token_from_file, save_access_token,
     load_refresh_token_from_file, BASE_URL, get_new_access_token_using_refresh_token
 )
-import config
+
+import config,utils
 
 log = logging.getLogger(__name__)
 
 # Thread-safe lock for shared resources
-lock = threading.Lock()
+lock = utils.TimeoutLock()
 
 
 def get_next_link(response_dict) -> str:
@@ -63,6 +66,7 @@ def fetch_folder_contents(endpoint: str, access_token: str):
                 log.warning("Access token expired, refreshing...")
                 access_token = get_new_access_token_using_refresh_token(load_refresh_token_from_file())
                 save_access_token(access_token)
+                config.accesstoken=access_token
                 headers["Authorization"] = f"Bearer {access_token}"  # Update header with new token
             elif response is not None and response.status_code == 404:
                 log.error(f"Error 404: The endpoint {endpoint} was not found. Check if the path is correct.")
@@ -156,12 +160,15 @@ def process_folders(access_token: str):
                 done, futures = concurrent.futures.wait(futures, timeout=config.TIMEOUT, return_when=concurrent.futures.FIRST_COMPLETED)
 
                 for future in done:
-                        with lock:
-                            current_folder, new_folders, new_files = future.result()
-                            folder_list.extend(new_folders)
-                            file_list.extend(new_files)
-                            config.status_str = f"Identifying files: \n{len(file_list)} files found so far,\n{config.folder_queue.qsize()} folders remaining"
-                            log.debug(f"Processed folder: {current_folder}")            
+                        with lock.acquire_timeout(10) as lockresult:
+                            if lockresult:
+                                current_folder, new_folders, new_files = future.result()
+                                folder_list.extend(new_folders)
+                                file_list.extend(new_files)
+                                config.status_str = f"Identifying files: \n{len(file_list)} files found so far,\n{config.folder_queue.qsize()} folders remaining"
+                                log.debug(f"Processed folder: {current_folder}")
+                            else:
+                                raise Exception("Unable to acquire lock!")
                 # Remove completed future
                 futures.discard(future)
             except TimeoutError:
@@ -179,12 +186,11 @@ def process_folders(access_token: str):
 
 
 def generate_list_of_all_files_and_folders(access_token):
-    if not access_token:
-        access_token = procure_new_tokens_from_user()
-        save_access_token(access_token)
+    
     
     file_list, folder_list = process_folders(access_token)
     
+    log.info("Saving files")
     with open("file_list.json", "w", encoding="utf-8") as f:
         json.dump(file_list, f, indent=2)
     
@@ -194,4 +200,34 @@ def generate_list_of_all_files_and_folders(access_token):
     config.progress_num=0
     log.info("File and folder lists have been saved.")
     log.info(f"Total Files: {len(file_list)}, Total Folders: {len(folder_list)}")
+    config.status_str = f"Identification complete: {len(file_list)} files found."
+    config.progress_num=0
     log.info("Done.")
+
+    
+def find_folder_and_file_from_url(url):
+    try:
+        for item in config.file_list:
+            if item["@microsoft.graph.downloadUrl"]==url:
+                folder="/me"+item["parentReference"]["path"]
+                file=item["name"]
+                return get_folder_endpoint(folder),file,item["id"]
+    except Exception as exc:
+        log.error(f"Error finding endpoint: {exc}")
+    return None,None
+    
+def refresh_download_url(url):
+    access_token = config.accesstoken
+    endpoint,file,fileid = find_folder_and_file_from_url(url)
+    log.debug(f"{url} is file {file} ({fileid}) in folder {endpoint}")
+    try:
+        content=fetch_folder_contents(endpoint,access_token)
+        for item in content.get("value", []):
+            is_folder = "folder" in item
+            if not is_folder and item["id"]==fileid:
+                good_url=item["@microsoft.graph.downloadUrl"]
+                return good_url     
+    except Exception as exc:
+        log.error(f"Error refreshing download url: {exc}")
+        log.error("Traceback: %s", traceback.format_exc())
+    return None

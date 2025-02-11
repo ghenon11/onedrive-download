@@ -12,37 +12,43 @@ from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 from dateutil import parser as datetimeparser
 from onedrive_authorization_utils import load_access_token_from_file,load_refresh_token_from_file,get_new_access_token_using_refresh_token,save_access_token
+from generate_list import refresh_download_url
 from filedate import File
 
-import config
+import config,utils
 
 log = logging.getLogger(__name__)
-lock = threading.Lock()
+lock = utils.TimeoutLock()
 item_download_errors = []
 
 def load_file_list() -> list:
-    try:
-        with open("file_list.json", "r", encoding='utf8') as f:
-            return json.load(f)
-    except Exception as e:
-        log.error(f"Error loading file list")
+    for attempt in range(config.MAX_RETRIES):
+        try:
+            with open("file_list.json", "r", encoding='utf8') as f:
+                config.file_list=json.load(f)
+                return config.file_list
+        except Exception as e:
+            log.warning(f"Error loading file list, attempt {attempt + 1}")
+            time.sleep(2 ** attempt) 
+    log.error(f"Error loading file list")
     return None
 
 
 def download_file_by_url(url, local_file_path):
-    access_token = load_access_token_from_file()
+    access_token = config.accesstoken
     headers = {"Authorization": "Bearer " + access_token}
-    for attempt in range(config.MAX_RETRIES):
-        try:
-            r = requests.get(url, headers=headers, allow_redirects=True, timeout=10)
-            r.raise_for_status()
-            with open(local_file_path, 'wb') as f:
-                f.write(r.content)
-            return local_file_path
-        except requests.exceptions.HTTPError as http_err:
-            log.error(f"HTTP error {http_err.response.status_code}: {http_err}")
-            if http_err.response.status_code==401:
-                with lock:
+    #for attempt in range(config.MAX_RETRIES):
+    try:
+        r = requests.get(url, headers=headers, allow_redirects=True, timeout=10)
+        r.raise_for_status()
+        with open(local_file_path, 'wb') as f:
+            f.write(r.content)
+        return local_file_path
+    except requests.exceptions.HTTPError as http_err:
+        log.warning(f"HTTP error {http_err.response.status_code}: {http_err}")
+        if http_err.response.status_code==401:
+            with lock.acquire_timeout(3) as lockresult:
+                if lockresult:
                     refresh_access_token=load_access_token_from_file()
                     if not refresh_access_token==access_token:
                         access_token=refresh_access_token
@@ -51,25 +57,27 @@ def download_file_by_url(url, local_file_path):
                         log.warning("Access token expired, refreshing...")
                         access_token = get_new_access_token_using_refresh_token(load_refresh_token_from_file())
                         save_access_token(access_token)
+                        config.accesstoken=access_token
                         headers["Authorization"] = f"Bearer {access_token}"  # Update header with new token
-            if http_err.response.status_code==404:
-                log.error(f"You need to generate the list!!!")
-                break
-            log.error(f"Attempt {attempt + 1} failed for {url}: HTTP Error {http_err}")           
-            time.sleep(2 ** attempt)                    
-        except requests.exceptions.RequestException as e:
-            log.error(f"Request attempt {attempt + 1} failed for {url}: {e}")
-            time.sleep(2 ** attempt)
-        except Exception as e:
-        #log.error(f"Error processing {item['name']}: {e}")
-            log.error(f"Error processing {filename.encode('utf-8')}")
-            log.error("Traceback: %s", traceback.format_exc())
-    log.error(f"Failed to download {url} after {config.MAX_RETRIES} attempts.")
+                else:
+                    raise Exception("Unable to acquire lock!")
+        if http_err.response.status_code==404:
+            new_url=refresh_download_url(url)
+            log.info(f"Trying refreshed url {new_url}")
+            if not new_url==url:
+                result=download_file_by_url(new_url,local_file_path)
+                if result:
+                    return result
+        log.error(f"HTTP Error {http_err} for url {url}")                             
+    except requests.exceptions.RequestException as e:
+        log.error(f"Request attempt {attempt + 1} failed for {url}: {e}")
+    except Exception as e:
+        log.error(f"Error processing {filename.encode('utf-8')}")
+        log.error("Traceback: %s", traceback.format_exc())
     config.num_error+=1
     if config.num_error > config.MAX_ERRORS:
         config.stop_flag=True
     return None
-
 
 def ensure_local_path_exists(local_path):
     Path(local_path).mkdir(parents=True, exist_ok=True)
@@ -146,7 +154,7 @@ def safe_submit(executor, func, item):
         log.warning("Stop flag is set. Skipping new downloads.")
         return None  # Prevent new tasks from being submitted
     
-    if not config.has_enough_space(get_local_download_folder_by_item(item)):
+    if not utils.has_enough_space(get_local_download_folder_by_item(item)):
         log.error("Low disk space. Stopping downloads...")
         config.stop_flag = True  # Set the stop flag to prevent further submissions
         return None
@@ -195,12 +203,15 @@ def download_the_list_of_files():
             json.dump(item_download_errors, f, indent=2)
         log.info("Errors logged in item_download_errors.json.")
     
+    log.debug(f"config.restart {config.restart}") 
+    
     log.info("Download process completed.")
     if config.stop_flag:
         config.status_str = "Downloads ended due to stop_flag"
     else:
         config.status_str = "Downloads completed"
     config.progress_num = 0
+        
 
 if __name__ == "__main__":
     download_the_list_of_files()
