@@ -35,12 +35,12 @@ Basically:
 	from any account type : Accounts in any organizational directory (Any Microsoft Entra ID tenant - Multitenant) and personal Microsoft accounts (e.g. Skype, Xbox)
 4. Add a Client Secret and save the client value
 5. Set Environment variables:
-	export MS_OPENGRAPH_APP_ID=your-app-id
-	export MS_OPENGRAPH_CLIENT_SECRET=your-client-secret
+   - export MS_OPENGRAPH_APP_ID=your-app-id
+   - export MS_OPENGRAPH_CLIENT_SECRET=your-client-secret
 5. Run `python start.py` to start application
 4. Use button "Get tokens" for one off setup, saving the code you see in your browser. It looks like "M.R3_BAY.ec1e0d91-e035-0065-f757-494a9c206744"
 5. Exit application, export additional environment variable and restart the application
-	export MS_OPENGRAPH_CODE=your-app-code
+   - export MS_OPENGRAPH_CODE=your-app-code
 6. Use button "Get tokens" again to generate token.
 
 Then you can use the application
