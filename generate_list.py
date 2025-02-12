@@ -95,7 +95,6 @@ def process_one_folder(access_token: str):
                     config.folder_queue.put(item["parentReference"]["path"] + "/" + item["name"])
                 else:
                     file_list.append(item)
-                    log.debug(f"Adding file URL: {item.get('@microsoft.graph.downloadUrl', 'No URL')}")
             
             endpoint = get_next_link(content)
             
@@ -187,7 +186,7 @@ def generate_list_of_all_files_and_folders(access_token):
 def find_folder_and_file_from_url(url):
     try:
         for item in config.file_list:
-            if item["@microsoft.graph.downloadUrl"]==url:
+            if item.get('@microsoft.graph.downloadUrl', 'No downloadUrl')==url:
                 folder="/me"+item["parentReference"]["path"]
                 file=item["name"]
                 return get_folder_endpoint(folder),file,item["id"]

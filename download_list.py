@@ -28,6 +28,7 @@ def load_file_list() -> list:
         try:
             with open("file_list.json", "r", encoding='utf8') as f:
                 config.file_list=json.load(f)
+                log.debug(f"config.file_list length is {len(config.file_list)}")
                 return config.file_list
         except Exception as e:
             log.warning(f"Error loading file list, attempt {attempt + 1}")
