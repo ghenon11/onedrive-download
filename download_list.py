@@ -19,6 +19,8 @@ import config,utils
 
 log = logging.getLogger(__name__)
 lock = utils.TimeoutLock()
+
+# TO DO check item_download_errors and add lock
 item_download_errors = []
 
 def load_file_list() -> list:
@@ -38,6 +40,8 @@ def download_file_by_url(url, local_file_path):
     access_token = config.accesstoken
     headers = {"Authorization": "Bearer " + access_token}
     #for attempt in range(config.MAX_RETRIES):
+    if not url:
+        return None
     try:
         r = requests.get(url, headers=headers, allow_redirects=True, timeout=10)
         r.raise_for_status()
@@ -46,8 +50,8 @@ def download_file_by_url(url, local_file_path):
         return local_file_path
     except requests.exceptions.HTTPError as http_err:
         log.warning(f"HTTP error {http_err.response.status_code}: {http_err}")
-        if http_err.response.status_code==401:
-            with lock.acquire_timeout(3) as lockresult:
+        if (http_err.response.status_code==401):
+            with lock.acquire_timeout(5) as lockresult:
                 if lockresult:
                     refresh_access_token=load_access_token_from_file()
                     if not refresh_access_token==access_token:
@@ -63,14 +67,13 @@ def download_file_by_url(url, local_file_path):
                     raise Exception("Unable to acquire lock!")
         if http_err.response.status_code==404:
             new_url=refresh_download_url(url)
-            log.info(f"Trying refreshed url {new_url}")
-            if not new_url==url:
+            if new_url and not new_url==url:
+                log.info(f"Trying refreshed url {new_url}")
                 result=download_file_by_url(new_url,local_file_path)
-                if result:
-                    return result
-        log.error(f"HTTP Error {http_err} for url {url}")                             
+                return result
+        log.error(f"HTTP Error {http_err}")                             
     except requests.exceptions.RequestException as e:
-        log.error(f"Request attempt {attempt + 1} failed for {url}: {e}")
+        log.error(f"Request failed for {url}: {e}")
     except Exception as e:
         log.error(f"Error processing {filename.encode('utf-8')}")
         log.error("Traceback: %s", traceback.format_exc())
@@ -125,6 +128,7 @@ def process_item(item):
         
         config.status_str="Downloading in progress\nFile "+str(config.progress_num)+"/"+str(config.progress_tot)
         download_url = item["@microsoft.graph.downloadUrl"]
+        # TODO: add info when big file as it will take time to download, as an additional line
         filename = urllib.parse.unquote(item["name"],encoding='utf-8')  # Decode URL-encoded filename
        # filename = filename.encode('utf-8')
         log.debug(f"Processing {filename.encode('utf-8')}")

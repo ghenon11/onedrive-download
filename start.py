@@ -14,7 +14,7 @@ from generate_list import generate_list_of_all_files_and_folders
 from download_list import download_the_list_of_files
 
 __author__ = "Guillaume HENON"
-__version__ = "0.2"
+__version__ = "0.3"
 
 class OneDriveDownloader(ctk.CTk):
     def __init__(self):
@@ -208,6 +208,7 @@ class OneDriveDownloader(ctk.CTk):
 if __name__ == "__main__":
     config.initialize()
     utils.init_logging()
+    #TODO, add arguments management (for debug at least)
     logging.getLogger(__name__)
     logging.info("Application starts")
     app = OneDriveDownloader()

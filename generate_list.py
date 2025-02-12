@@ -34,7 +34,7 @@ def get_folder_endpoint(folder: str) -> str:
 
 def format_endpoint(endpoint: str) -> str:
     """Normalize and validate the endpoint URL to prevent 404 errors."""
-    log.debug("endpoint in %s",endpoint)
+    endpoint_in=endpoint
     endpoint = endpoint.strip()  # Remove leading/trailing spaces
     decoded_url = urllib.parse.unquote(endpoint)  # Decode once
     attempts=0
@@ -44,7 +44,7 @@ def format_endpoint(endpoint: str) -> str:
         attempts += 1
     #Since # is a fragment identifier and isn't sent in HTTP requests, you need to encode it as %23 if you want it to be treated as part of the query string.   
     endpoint = endpoint.replace("#","%23")
-    log.debug("endpoint out %s",endpoint)
+    log.debug(f"endpoint in ({endpoint_in}), out ({endpoint})")
     
     return endpoint
 
@@ -52,40 +52,19 @@ def fetch_folder_contents(endpoint: str, access_token: str):
     """Fetch folder contents with automatic endpoint validation and retry logic."""
     endpoint = format_endpoint(endpoint)  # Format the endpoint to avoid 404
     headers = {"Authorization": f"Bearer {access_token}"}
-    attempts = 0
 
-    while attempts < 3 and not config.stop_flag:
+    if not config.stop_flag:
         try:
             response = requests.get(endpoint, headers=headers)
             response.encoding = "utf-8"
             response.raise_for_status()
-            return response.json()
-        
-        except requests.exceptions.HTTPError as e:
-            if response is not None and response.status_code == 401:
-                log.warning("Access token expired, refreshing...")
-                access_token = get_new_access_token_using_refresh_token(load_refresh_token_from_file())
-                save_access_token(access_token)
-                config.accesstoken=access_token
-                headers["Authorization"] = f"Bearer {access_token}"  # Update header with new token
-            elif response is not None and response.status_code == 404:
-                log.error(f"Error 404: The endpoint {endpoint} was not found. Check if the path is correct.")
-                break  # Don't retry if the endpoint is invalid
-            else:
-                if attempts<2:
-                    log.error(f"HTTP error {response.status_code}: {e}, attempt {attempts + 1}")
-                else:
-                    log.warning(f"HTTP error {response.status_code}: {e}, attempt {attempts + 1}")
-               # break  # Stop retrying for non-recoverable HTTP errors (e.g., 403, 404)
-
+            return response.json()      
+        except requests.exceptions.HTTPError as http_err:
+            log.error(f"HTTP Error {http_err}")
         except requests.exceptions.RequestException as e:
-            log.error(f"Request error: {e}, attempt {attempts + 1}")
-        
+            log.error(f"Request error: {e}")      
         except Exception as e:
-            log.error(f"Unexpected error: {e}, attempt {attempts + 1}")
-
-        attempts += 1
-
+            log.error(f"Unexpected error: {e}")
     return None
 
 
@@ -214,19 +193,35 @@ def find_folder_and_file_from_url(url):
                 return get_folder_endpoint(folder),file,item["id"]
     except Exception as exc:
         log.error(f"Error finding endpoint: {exc}")
-    return None,None
+    return None,None,None
     
 def refresh_download_url(url):
     access_token = config.accesstoken
     endpoint,file,fileid = find_folder_and_file_from_url(url)
     log.debug(f"{url} is file {file} ({fileid}) in folder {endpoint}")
+    good_url=""
     try:
-        content=fetch_folder_contents(endpoint,access_token)
-        for item in content.get("value", []):
-            is_folder = "folder" in item
-            if not is_folder and item["id"]==fileid:
-                good_url=item["@microsoft.graph.downloadUrl"]
-                return good_url     
+        if not endpoint or not url or not access_token:
+            log.error(f"Error searching {url}: file {file} ({fileid}) in folder {endpoint}")
+            return None
+            
+        while endpoint and not good_url:
+            content=fetch_folder_contents(endpoint,access_token)
+            
+            if not content:
+                log.error(f"Error fetching content for {url}: file {file} ({fileid}) in folder {endpoint}")
+                return None
+            for item in content.get("value", []):
+                if item["id"]==fileid:
+                    good_url=item.get('@microsoft.graph.downloadUrl', 'No downloadUrl')         
+                    break
+            endpoint = get_next_link(content)
+            
+        log.debug(f"Item name %s (%s) - %s",item["name"],item["id"],good_url)
+        if "http" in good_url:
+            return good_url
+        else:
+            return None
     except Exception as exc:
         log.error(f"Error refreshing download url: {exc}")
         log.error("Traceback: %s", traceback.format_exc())

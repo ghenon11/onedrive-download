@@ -13,10 +13,11 @@ def initialize():
     MAX_RETRIES = 3
     MAX_WORKERS = 10
     MAX_WORKERS_GEN = 20
-    LOG_LEVEL=logging.INFO
+    LOG_LEVEL=logging.DEBUG
     stop_flag=False
     num_error=0
     MAX_ERRORS=max(MAX_WORKERS, MAX_WORKERS_GEN)+5
+    #MAX_ERRORS=3
     status_str=""
     progress_num=0
     progress_tot=10000
