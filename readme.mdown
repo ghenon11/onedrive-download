@@ -1,115 +1,52 @@
-# OneDrive Downloader (Python)
+# OneDrive OneDrive Offline Backup (Python)
 
-At this writing (Jan 2023), the OneDrive user interface makes it hard to download just your photos and videos in one go. You typically have to select each of them, item by item, week by week or folder by folder. 
+OneDrive OneDrive Offline Backup is a tool to backup all files in your personal OneDrive to a folder, which can be on an external drive for example
 
-Or, maybe you can do one big "select all" operation, but then it tries to create a gigantic Zip file, and maybe your internet connection doesn't like gigantic multi-gigabyte files. 
-
-Have you ever wanted to programmatically list, or download (or even selectively delete or rename) all your files from your OneDrive account via Python? 
-
-This code will give you a head start.
-
-**Disclaimer**: This utility is literally just a few hours of coding, so don't expect it to catch all the edge-cases. 
-
-**Authentication**: Microsoft, like most companies, uses OAuth to grant you access to your stuff. OAuth basically assumes there's a web app ready to receive an authorization code. But this is a mere terminal application, a command-line interface utility (CLI.) So you'll notice that the process of acquiring the **access_token** and **refresh_token** employs a somewhat hacky (but working and completely permissible) method to get the OAuth code. It spins up a web browser to make a request for permission, you grant that permission, and Microsoft's endpoint says "OK, here's a code for you" by redirecting your browser to a "localhost" website which... doesn't exist. So you get an error message in the web page. But fear not. That's expected. All you're really looking for is the magical "code=" parameter in the address bar, and you copy it and paste the value which follows "code=" into the CLI when prompted. 
-
-From there, the CLI happily saves this for you, and you're on your way. These steps give you the essential **access_token** and **refresh_token**. 
+It is based on the work of Steve Murch https://github.com/stevemurch/onedrive-download, with additional functionalities:
+	- A GUI, made nice thanks to Tom Schimansky customtkinter https://github.com/TomSchimansky/CustomTkinter
+	- Heavy threading for enhanced performance
+	- File information (creation/last modification) kept
+	- Thanks to file information, only backup file if it as changed since last run
+	- Handle access token expiration
+	- Handle changed Download Url on the fly
+	- And more...
 
 ## Basic components
 
 | Filename                  | Role                                                                                                                                               |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| start.py                  | The loader application; the command-line interface. This is the only code you run directly. It in turn calls the others.                                                                                              |
+| start.py                  | The loader application; the GUI. This is the only code you run directly. It in turn calls the others.                                              |
 | onedrive_authorization.py | Various ways to get the access_token and refresh_token for the Microsoft opengraph                                                                 |
-| generate_list.py          | Code to generate the list of files and folders, to walk the OneDrive folder tree basically                                                         |
+| generate_list.py          | Code to generate the list of files and folders, to walk the OneDrive folder tree basically. Also handle refreshing the download path               |
 | download_list.py          | Once the file_list.json file is generated, this walks through that file and downloads the items, preserving the file structure as seen on OneDrive |
-
+| config.py                 | Global variables                                                                                                                                   |
+| utils.py                  | Various utility function: Logging, Lock with Timeout, ...                                                                                          |
 # Getting Started
 
 Basically:
 
 1. Clone this repo.
-2. Create your own "App Registration" with the File.ReadWriteAll permission scope in Azure Portal (this is free.) This gives you two important variables that you need to set as environment variables to run this code.
-3. Run `python start.py`
-4. Choose option 1 to get your initial access_token and refresh_token saved locally to your machine. Then choose option 3 (to list all files and create file_list.json on your local machine), then option 4 (to incrementally fetch all the assets listed in file_list.json.)
-
-Voila. That's it. This code should provide a jumping-off point for, say, downloading just the images, or videos, or files with particular attributes.
-
-This code will download files into a "downloads" project subfolder, and preserve the folder structure you have on OneDrive.
-
-You'll need to set the root_folder location (search for "root_folder" variable, which is in the generate_list.py file.) In my case, I've started it at:
-
-`root_folder = "/me/drive/root:/P"`
-
-... simply because MY OneDrive folder has top-level A, B, C... Z folder names, and I placed "Pictures" in the "P" folder. But your OneDrive is very unlikely to be set up that way.
-
-Note that Microsoft's OneDrive has ["special" folder names](https://learn.microsoft.com/en-us/graph/api/drive-get-specialfolder?view=graph-rest-1.0&tabs=http) too, such as "/me/drive/special/{name}", where name="music" or "photos", etc.
-
-```bash
-git clone https://github.com/stevemurch/onedrive-download
-cd onedrive-download
-
-// Next, install the requirements.
-// If any of them fail, follow their respective documentation
-// NOTE: This project was built with Python v3.11
-
-pip install -r requirements.txt
-
-// Now, to Authorize yourself to modify your OneDrive files, you
-// need to create an "App Registration" on the Azure Portal.
-// Create your Azure app via the portal; search for "app registration"
-// Choose a consumer app. Be sure to give your Azure app
-// Files.ReadWriteAll permissions
-
-// Then, once you've got your app created, go find and set the following
-// two critical ENVIRONMENT VARIABLES:
-
-export MS_OPENGRAPH_APP_ID=your-app-id
-export MS_OPENGRAPH_CLIENT_SECRET=your-client-secret
-
-// substituting in your own app id and client secret where shown above
-
-// Then, to start the CLI, just run:
-
-python start.py
-
-// You'll want to choose Option 1 first, which will create your
-// access_token and refresh_tokens.
-
-// Note that access_tokens only last an hour. After that, all fetches to
-// the MS OpenGraph API will get rejected. I have not yet done the work to
-// automatically generate a new access_token when one is expired. I'm generally
-// assuming you're running steps 1, 3 and 4 in succession, within 60 minutes,
-// before that clock is up. Feel free to enhance this quick and dirty utility
-// to handle this situation more gracefully.
-
-// Also, sometimes during large file downloads (e.g., videos), you might
-// get an error. The downloads will simply log that error to a file and move
-// on to the next one on the list. I've used this to download about 5,560 files
-// and got maybe 6 errors of large videos, easy enough to
-// handle manually later.
-```
-
-This Python utility uses the Microsoft Opengraph API's to traverse the OneDrive folders and download files. The sample code included here begins at `start.py` and includes these basic options:
-
-<img width="1226" alt="image" src="https://user-images.githubusercontent.com/9558478/210688866-4023e131-0d46-41a2-a981-49ca4768f7c8.png">
-
-| Option | What it does                                                                                                                                                                                  |
-| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1      | Generate access_token and refresh_token and save locally.                                                                                                                                     |
-| 2      | Using a refresh_token, generate a new access_token                                                                                                                                            |
-| 3      | Traverse the folder tree and make a list of folders and files. Two .json files, one containing a list of folders, and another containing a list of files, are saved to your local hard drive. |
-| 4      | Walk through the list of files and fetch them one by one, and save to local disk.                                                                                                             |
-
-This is working on a local machine, but does include one hardcoded path to my own "P/Pictures" folder. You'll want to double-check the root path.
+2. Create your own "App Registration" in Azure Portal https://portal.azure.com/. Save the application id value
+3. Add Authentication:
+	Mobile and desktop applications,
+	redirect URL https://login.microsoftonline.com/common/oauth2/nativeclient,
+	from any account type : Accounts in any organizational directory (Any Microsoft Entra ID tenant - Multitenant) and personal Microsoft accounts (e.g. Skype, Xbox)
+4. Add a Client Secret and save the client value
+5. Set Environment variables:
+	export MS_OPENGRAPH_APP_ID=your-app-id
+	export MS_OPENGRAPH_CLIENT_SECRET=your-client-secret
+5. Run `python start.py`
+4. Use button "Get tokens" for one off setup
+5. 
 
 ## Prerequisites
 
 Written in Python 3.11. Some of the included libraries require 3.1 or above; this will not work in Python 2.x.
 
-The app looks for two key environment variables:
-
-`MS_OPENGRAPH_APP_ID` and
-
-`MS_OPENGRAPH_CLIENT_SECRET`
-
-To generate these, go to the Azure Portal, and type in "app registrations". Create a new app registration, and new client secrets for them. Save these values to your local environment variables.
+Need below modules
+customtkinter https://github.com/TomSchimansky/CustomTkinter
+requests
+contextlib
+PIL
+json
+... And maybe more
