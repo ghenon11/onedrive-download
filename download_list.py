@@ -125,12 +125,13 @@ def is_file_changed(item, local_file_path):
 
 def process_item(item):
     try:
-        
+        filename="To Be Set"
         config.status_str="Downloading in progress\nFile "+str(config.progress_num)+"/"+str(config.progress_tot)
-        download_url = item["@microsoft.graph.downloadUrl"]
+        #download_url = item["@microsoft.graph.downloadUrl"]
+        download_url=item.get('@microsoft.graph.downloadUrl', 'No downloadUrl')
         # TODO: add info when big file as it will take time to download, as an additional line
         filename = urllib.parse.unquote(item["name"],encoding='utf-8')  # Decode URL-encoded filename
-       # filename = filename.encode('utf-8')
+       # fil=ename = filename.encode('utf-8')
         log.debug(f"Processing {filename.encode('utf-8')}")
         local_folder_path = get_local_download_folder_by_item(item)
         local_file_path = os.path.join(local_folder_path, filename)
@@ -167,9 +168,9 @@ def safe_submit(executor, func, item):
 
 def download_the_list_of_files():
     log.info("Download process Started.")
-    config.status_str = "Downloads start"
+    config.status_str = "Loading files list"
     items = load_file_list()
-
+    config.status_str = "Downloads start"
     if not items or len(items) == 0:
         log.error("No items in file")
         return

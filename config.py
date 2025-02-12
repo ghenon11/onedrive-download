@@ -13,7 +13,7 @@ def initialize():
     MAX_RETRIES = 3
     MAX_WORKERS = 10
     MAX_WORKERS_GEN = 20
-    LOG_LEVEL=logging.DEBUG
+    LOG_LEVEL=logging.INFO
     stop_flag=False
     num_error=0
     MAX_ERRORS=max(MAX_WORKERS, MAX_WORKERS_GEN)+5
