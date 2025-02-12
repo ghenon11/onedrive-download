@@ -5,14 +5,18 @@ import json
 import os 
 import logging
 
+import config
+
 log = logging.getLogger(__name__)
 
 # Set these environment variables:
 # MS_OPENGRAPH_APP_ID
 # MS_OPENGRAPH_CLIENT_SECRET 
 
+# TODO check variable exists !!
 APP_ID=os.environ.get("MS_OPENGRAPH_APP_ID")
-CLIENT_SECRET=os.environ.get("MS_OPENGRAPH_CLIENT_SECRET") 
+CLIENT_SECRET=os.environ.get("MS_OPENGRAPH_CLIENT_SECRET")
+APP_CODE=os.environ.get("MS_OPENGRAPH_APP_CODE")
 SCOPES=["Files.ReadWrite.All"]
 
 # This will expire in 24 months -- i.e., January 2, 2025.
@@ -25,23 +29,26 @@ def procure_new_tokens_from_user() -> tuple:
     endpoint = BASE_URL + "me"
     SCOPES = ["User.Read", "User.Export.All, Files.ReadWrite.All"]
     log.debug("APP_ID %s CLIENT_SECRET %s",APP_ID,CLIENT_SECRET)
-
     client_instance = msal.ConfidentialClientApplication(
-        client_id = APP_ID,
-   #     client_credential = CLIENT_SECRET, seems not needed for desktop app
-        authority = AUTHORITY_URL)
-    authorization_request_url = client_instance.get_authorization_request_url(SCOPES)
-    webbrowser.open(authorization_request_url)
-    log.debug(authorization_request_url)
-    log.info("")
-    log.info("Please enter the code you see in the URL on the web browser:")
-    authorization_code = input()
-    # example: authorization_code = "M.R3_BAY.ec1e0d91-e035-0065-f757-494a9c206744"
-    tokenDictionary = client_instance.acquire_token_by_authorization_code(code=authorization_code, scopes=SCOPES)
-    log.info("TokenDirectory %s",tokenDictionary)
-    access_token = tokenDictionary["access_token"]
-    refresh_token = tokenDictionary["refresh_token"]
-    name = tokenDictionary["id_token_claims"]["name"]
+            client_id = APP_ID,
+       #     client_credential = CLIENT_SECRET, seems not needed for desktop app
+            authority = AUTHORITY_URL)
+    if not APP_CODE:      
+        authorization_request_url = client_instance.get_authorization_request_url(SCOPES)
+        webbrowser.open(authorization_request_url)
+        log.debug(authorization_request_url)
+        log.info("Please use the code you see in the URL on the web browser to set environment variable MS_OPENGRAPH_CODE ")
+        config.status_str="Please use the code you see in the URL on the web browser to set environment variable MS_OPENGRAPH_APP_CODE"
+        # example: authorization_code = "M.R3_BAY.ec1e0d91-e035-0065-f757-494a9c206744"
+        access_token = ""
+        refresh_token =""
+        name = "Set APP CODE"
+    else:
+        tokenDictionary = client_instance.acquire_token_by_authorization_code(code=APP_CODE, scopes=SCOPES)
+        log.info("TokenDirectory %s",tokenDictionary)
+        access_token = tokenDictionary["access_token"]
+        refresh_token = tokenDictionary["refresh_token"]
+        name = tokenDictionary["id_token_claims"]["name"]
     return (access_token, refresh_token, name)
 
 def load_access_token_from_file() -> str:

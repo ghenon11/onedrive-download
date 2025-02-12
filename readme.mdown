@@ -3,13 +3,13 @@
 OneDrive OneDrive Offline Backup is a tool to backup all files in your personal OneDrive to a folder, which can be on an external drive for example
 
 It is based on the work of Steve Murch https://github.com/stevemurch/onedrive-download, with additional functionalities:
-	- A GUI, made nice thanks to Tom Schimansky customtkinter https://github.com/TomSchimansky/CustomTkinter
-	- Heavy threading for enhanced performance
-	- File information (creation/last modification) kept
-	- Thanks to file information, only backup file if it as changed since last run
-	- Handle access token expiration
-	- Handle changed Download Url on the fly
-	- And more...
+- A GUI, made nice thanks to Tom Schimansky customtkinter https://github.com/TomSchimansky/CustomTkinter
+- Heavy threading for enhanced performance
+- File information (creation/last modification) kept
+- Thanks to file information, only backup file if it as changed since last run
+- Handle access token expiration
+- Handle changed Download Url on the fly
+- And more...
 
 ## Basic components
 
@@ -35,9 +35,12 @@ Basically:
 5. Set Environment variables:
 	export MS_OPENGRAPH_APP_ID=your-app-id
 	export MS_OPENGRAPH_CLIENT_SECRET=your-client-secret
-5. Run `python start.py`
-4. Use button "Get tokens" for one off setup
-5. 
+5. Run `python start.py` to start application
+4. Use button "Get tokens" for one off setup, saving the code you see in your browser. It looks like "M.R3_BAY.ec1e0d91-e035-0065-f757-494a9c206744"
+5. Exit application, export additional environment variable and restart the application
+	export MS_OPENGRAPH_CODE=your-app-code
+6. Use button "Generate files". You can set a OneDrive root folder to backup only a part of your OneDrive, like /Pictures
+7. Use button "Download files". You can set the download path before
 
 ## Prerequisites
 

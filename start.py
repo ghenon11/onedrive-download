@@ -124,8 +124,11 @@ class OneDriveDownloader(ctk.CTk):
     def get_refresh_and_access_tokens(self):
         try:
             access_token, refresh_token, name = procure_new_tokens_from_user()
-            save_refresh_token(refresh_token)
-            messagebox.showinfo("Success", f"Hello {name}! Tokens saved successfully.")
+            if refresh_token:
+                save_refresh_token(refresh_token)
+                messagebox.showinfo("Success", f"Hello {name}! Tokens saved successfully.")
+            else:
+                messagebox.showinfo("Initialisation", "Set MS_OPENGRAPH_APP_CODE environment variable with the code you find in your browser and restart")
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
