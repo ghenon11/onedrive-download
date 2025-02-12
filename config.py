@@ -23,7 +23,7 @@ def initialize():
     progress_tot=10000
     MIN_FREE_SPACE_BYTES = 5 * 1024 * 1024 * 1024  # 1GB
     LOG_FILE = os.path.join(INSTALL_DIR,"logs", "OneDriveOfflineBackup.log")
-    BG_IMG = os.path.join(INSTALL_DIR,"imgs","backup.png")
+    BG_IMG = os.path.join(INSTALL_DIR,"imgs","OneDriveOfflineBackup.png")
     LOG_BACKUP_COUNT = 10  # Keep up to 10 backup logs
     TIMEOUT = 20
     accesstoken=""
