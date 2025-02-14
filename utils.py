@@ -61,7 +61,7 @@ from contextlib import contextmanager
 
 class TimeoutLock(object):
     def __init__(self):
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
     def acquire(self, blocking=True, timeout=-1):
         return self._lock.acquire(blocking, timeout)
@@ -75,3 +75,4 @@ class TimeoutLock(object):
 
     def release(self):
         self._lock.release()
+        

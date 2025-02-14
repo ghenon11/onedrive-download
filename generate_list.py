@@ -26,7 +26,7 @@ def get_next_link(response_dict) -> str:
 
 
 def get_folder_endpoint(folder: str) -> str:
-    if folder == "/me/drive/root:/":
+    if folder == "/me/drive/root:/" or folder=="/me/drive/root:":
         log.debug("Starting at OneDrive root folder")
         return f"{BASE_URL}/me/drive/root/children"
     return f"{BASE_URL}{quote(folder)}:/children"
@@ -186,7 +186,7 @@ def generate_list_of_all_files_and_folders(access_token):
 def find_folder_and_file_from_url(url):
     try:
         for item in config.file_list:
-            if item.get('@microsoft.graph.downloadUrl', 'No downloadUrl')==url:
+            if item.get('@microsoft.graph.downloadUrl')==url:
                 folder="/me"+item["parentReference"]["path"]
                 file=item["name"]
                 return get_folder_endpoint(folder),file,item["id"]
@@ -212,7 +212,7 @@ def refresh_download_url(url):
                 return None
             for item in content.get("value", []):
                 if item["id"]==fileid:
-                    good_url=item.get('@microsoft.graph.downloadUrl', 'No downloadUrl')         
+                    good_url=item.get('@microsoft.graph.downloadUrl')         
                     break
             endpoint = get_next_link(content)
             
