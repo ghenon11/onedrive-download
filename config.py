@@ -7,7 +7,7 @@ import utils
 # https://learn.microsoft.com/en-us/onedrive/developer/rest-api/?view=odsp-graph-online
 
 def initialize(): 
-    global OFFLINEBACKUP_PATH, ONEDRIVEDIR_PATH, MAX_RETRIES,MAX_WORKERS,MAX_WORKERS_GEN,INSTALL_DIR,BG_IMG,downloadinprogress,excluded_endpoints,item_download_errors,stop_flag,num_error,MAX_ERRORS,status_str,progress_num,progress_tot,MIN_FREE_SPACE_BYTES,LOG_FILE,LOG_LEVEL,LOG_BACKUP_COUNT,TIMEOUT,folder_queue,accesstoken,file_list
+    global OFFLINEBACKUP_PATH, ONEDRIVEDIR_PATH, MAX_RETRIES,MAX_WORKERS,MAX_WORKERS_GEN,INSTALL_DIR,BG_IMG,downloadinprogress,isprocessing,excluded_endpoints,item_download_errors,stop_flag,num_error,MAX_ERRORS,status_str,progress_num,progress_tot,MIN_FREE_SPACE_BYTES,LOG_FILE,LOG_LEVEL,LOG_BACKUP_COUNT,TIMEOUT,folder_queue,accesstoken,file_list
     INSTALL_DIR=utils.get_main_dir()
     OFFLINEBACKUP_PATH = os.path.join(INSTALL_DIR, "Downloads")
     ONEDRIVEDIR_PATH = "/"
@@ -16,6 +16,7 @@ def initialize():
     MAX_WORKERS_GEN = 20
     LOG_LEVEL=logging.DEBUG
     stop_flag=False
+    isprocessing=False
     num_error=0
     exclusion_list=[]
     downloadinprogress=[]

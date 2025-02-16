@@ -4,7 +4,7 @@ import requests
 import json
 import os 
 import logging
-
+import threading
 import config
 
 log = logging.getLogger(__name__)
@@ -19,6 +19,8 @@ CLIENT_SECRET=os.environ.get("MS_OPENGRAPH_CLIENT_SECRET")
 APP_CODE=os.environ.get("MS_OPENGRAPH_APP_CODE")
 SCOPES=["Files.ReadWrite.All"]
 
+lock_token = threading.Lock()
+
 # This will expire in 24 months -- i.e., January 2, 2025.
 # You can generate a new one in Azure Portal under app registrations > client secrets
 
@@ -28,7 +30,7 @@ BASE_URL = "https://graph.microsoft.com/v1.0/"
 def procure_new_tokens_from_user() -> tuple:
     endpoint = BASE_URL + "me"
     SCOPES = ["User.Read", "User.Export.All, Files.ReadWrite.All"]
-    log.debug("APP_ID %s CLIENT_SECRET %s",APP_ID,CLIENT_SECRET)
+    log.debug("APP_CODE %s APP_ID %s CLIENT_SECRET %s",APP_CODE,APP_ID,CLIENT_SECRET)
     client_instance = msal.ConfidentialClientApplication(
             client_id = APP_ID,
        #     client_credential = CLIENT_SECRET, seems not needed for desktop app
@@ -44,6 +46,7 @@ def procure_new_tokens_from_user() -> tuple:
         refresh_token =""
         name = "Set APP CODE"
     else:
+        log.debug(f"Acquiring token with code {APP_CODE}")
         tokenDictionary = client_instance.acquire_token_by_authorization_code(code=APP_CODE, scopes=SCOPES)
         log.info("TokenDirectory %s",tokenDictionary)
         access_token = tokenDictionary["access_token"]
@@ -52,9 +55,10 @@ def procure_new_tokens_from_user() -> tuple:
     return (access_token, refresh_token, name)
 
 def load_access_token_from_file() -> str:
-    try: 
-        with open("access_token.txt") as f:
-            line = f.readline()
+    try:
+        with lock_token:
+            with open("access_token.txt") as f:
+                line = f.readline()
         return line
     except Exception as e:
         log.error(f"Unexpected error during load access token: {e}")
@@ -70,13 +74,15 @@ def load_refresh_token_from_file() -> str:
     return None
 
 def save_access_token(token:str):
-    with open("access_token.txt", "w") as f:
-         f.write(token)
+    with lock_token:
+        with open("access_token.txt", "w") as f:
+            f.write(token)
     return 
 
 def save_refresh_token(token:str):
-    with open("refresh_token.txt", "w") as f:
-         f.write(token)
+    with lock_token:
+        with open("refresh_token.txt", "w") as f:
+            f.write(token)
     return 
 
 # see https://learn.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#5-use-the-refresh-token-to-get-a-new-access-token

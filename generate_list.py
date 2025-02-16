@@ -158,6 +158,7 @@ def process_folders(access_token: str):
         executor.shutdown(wait=True)
 
     config.status_str = f"Identification complete: {len(file_list)} files found."
+    config.isprocessing=False
     config.progress_num=0
     return file_list, folder_list
 

@@ -14,6 +14,7 @@ from dateutil import parser as datetimeparser
 from onedrive_authorization_utils import load_access_token_from_file,load_refresh_token_from_file,get_new_access_token_using_refresh_token,save_access_token
 from generate_list import refresh_download_url
 from filedate import File
+from contextlib import closing
 
 import config,utils
 
@@ -23,16 +24,21 @@ lock_download = threading.Lock()
 # TO DO check item_download_errors and add lock
 
 
-def load_file_list() -> list:
+def load_file_list(perror) -> list:
+    if perror==1:
+        filelist="item_download_errors.json"
+    else:
+        filelist="file_list.json"
+    log.info(f"Loading {filelist}")
     for attempt in range(config.MAX_RETRIES):
         try:
-            with open("file_list.json", "r", encoding='utf8') as f:
+            with open(filelist, "r", encoding='utf8') as f:
                 config.file_list=json.load(f)
                 log.debug(f"config.file_list length is {len(config.file_list)}")
                 return config.file_list
         except Exception as e:
             log.warning(f"Error loading file list, attempt {attempt + 1}")
-            time.sleep(2 ** attempt) 
+            time.sleep( 3 * attempt) 
     log.error(f"Error loading file list")
     return None
 
@@ -49,35 +55,64 @@ def refresh_url_from_fileid(fileid):
         log.error("Traceback: %s", traceback.format_exc())
     return download_url
 
-def download_file_by_url(url, local_file_path):
+def download_file_by_url(url, local_file_path, item):
     access_token = config.accesstoken
     headers = {"Authorization": "Bearer " + access_token}
-    #for attempt in range(config.MAX_RETRIES):
+    
     if not url:
         return None
+    
+    filesize = item["size"]
+    fileid = item["id"]
+    
     try:
-        r = requests.get(url, headers=headers, allow_redirects=True, timeout=3)
-        r.raise_for_status()
-        with open(local_file_path, 'wb') as f:
-            f.write(r.content)
+        if filesize < 100*1024*1024:  # Small files (<100MB) downloaded in one go
+            r = requests.get(url, headers=headers, allow_redirects=True, timeout=3)
+            r.raise_for_status()
+            with open(local_file_path, 'wb') as f:
+                f.write(r.content)
+        else:
+            log.info("Big file identified, downloading in chunks")
+                        
+            downloaded_size = 0
+            chunk_size = 10*1024 * 1024  # 10MB
+            log_interval = filesize / 100  # Log every 1% of the total size
+            next_log_threshold = log_interval  # First log threshold
+            
+            response=requests.get(url, stream=True, headers=headers, allow_redirects=True, timeout=10)
+            response.raise_for_status()
+            with open(local_file_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=chunk_size):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded_size += len(chunk)
+                        
+                        # Log progress at every 1% increment
+                        if downloaded_size >= next_log_threshold:
+                            with lock_download:
+                                index=next((i for i, entry in enumerate(config.downloadinprogress) if entry["id"] == fileid), None)
+                                config.downloadinprogress[index]["downloaded"]=downloaded_size
+                            next_log_threshold += log_interval  # Update next threshold
+
         return local_file_path
+
     except requests.exceptions.HTTPError as http_err:
-        if http_err.response.status_code==404:
+        if http_err.response.status_code == 404:
             log.warning(f"HTTP error {http_err.response.status_code}: {http_err}")
-            new_url=refresh_download_url(url)
-            if new_url and not new_url==url:
-                log.info(f"Trying refreshed url {new_url}")
-                result=download_file_by_url(new_url,local_file_path)
-                return result
+            new_url = refresh_download_url(url)
+            if new_url and new_url != url:
+                log.info(f"Trying refreshed URL {new_url}")
+                return download_file_by_url(new_url, local_file_path, item)
         else:
             log.error(f"HTTP Error {http_err}")
+    
     except requests.exceptions.RequestException as e:
         log.error(f"Request failed for {url}: {e}")
-
+    
     except Exception as e:
-        log.error(f"Error processing {filename.encode('utf-8')}")
+        log.error(f"Error processing {local_file_path.encode('utf-8')}")
         log.error("Traceback: %s", traceback.format_exc())
-        config.num_error+=1
+        config.num_error += 1
 
     return None
 
@@ -137,6 +172,11 @@ def process_item(item):
     try:
         filename = "To Be Set"
         config.status_str = f"Files processed: {config.progress_num} of {config.progress_tot}"
+        if config.progress_num % 100 == 0:  # Only update every 100 files
+            log.info(config.status_str)
+        
+        filetype=item.get('file',{}).get('mimeType','Unknown type')
+        filecreatedby=item["createdBy"]["application"]["displayName"]
         fileid = item["id"]
         download_url = item.get('@microsoft.graph.downloadUrl')
         filename = urllib.parse.unquote(item["name"], encoding='utf-8')
@@ -145,42 +185,45 @@ def process_item(item):
         filepath = os.path.join(get_onedrive_path_by_item(item), filename)
         filepath = os.path.normpath(filepath)
         
-        log.info(f"Processing {filename_enc}({fileid}) in {onedrivefilepath}")
+        log.info(f"Processing {filename_enc}({fileid}) of type {filetype} in {onedrivefilepath}")
         
-        if is_file_excluded(config.exclusion_list, filepath):
-            log.info(f"{filename_enc} excluded")
+        if filecreatedby=="Office.OneNote":
+            log.warning(f"Office OneNote files cannot be downloaded !")
         else:
-            local_folder_path = get_local_download_folder_by_item(item)
-            local_file_path = os.path.join(local_folder_path, filename)
-            ensure_local_path_exists(local_folder_path)
-            
-            if is_file_changed(item, local_file_path):
-                log.debug(f"Downloading {filename.encode('utf-8')}")
-                
-                with lock_download:  # Ensuring thread safety
-                    config.downloadinprogress.append(item)
-                
-                filesizemb = item["size"] / 1024 / 1024
-                if filesizemb > 100:
-                    log.info(f"Processing file {filename_enc} of {filesizemb}Mb")
-                
-                downloaded_file = download_file_by_url(download_url, local_file_path)
-                
-                with lock_download:  # Ensuring thread safety
-                    config.downloadinprogress = [entry for entry in config.downloadinprogress if entry["id"] != fileid]
-                
-                if downloaded_file:
-                    update_file_dates(local_file_path, item)
-                    local_file_path = os.path.normpath(local_file_path)
-                    log.info(f"Downloaded: {local_file_path.encode('utf-8')}")
-                else:
-                    with lock_download:  # Ensuring thread safety
-                        config.item_download_errors.append(item)
-                        config.num_error += 1
+            if is_file_excluded(config.exclusion_list, filepath):
+                log.info(f"{filename_enc} excluded")
             else:
-                log.info(f"Unchanged: {filename_enc}")
-            
-            config.progress_num += 1
+                local_folder_path = get_local_download_folder_by_item(item)
+                local_file_path = os.path.join(local_folder_path, filename)
+                ensure_local_path_exists(local_folder_path)
+                
+                if is_file_changed(item, local_file_path):
+                    log.debug(f"Downloading {filename.encode('utf-8')}")
+                    
+                    with lock_download:  # Ensuring thread safety
+                        config.downloadinprogress.append(item)
+                    
+                    filesizemb = item["size"] / 1024 / 1024
+                    if filesizemb > 100:
+                        log.info(f"Processing file {filename_enc} of {int(filesizemb)}Mb")
+                    
+                    downloaded_file = download_file_by_url(download_url, local_file_path,item)
+                    
+                    with lock_download:  # Ensuring thread safety
+                        config.downloadinprogress = [entry for entry in config.downloadinprogress if entry["id"] != fileid]
+                    
+                    if downloaded_file:
+                        update_file_dates(local_file_path, item)
+                        local_file_path = os.path.normpath(local_file_path)
+                        log.info(f"Downloaded: {local_file_path.encode('utf-8')}")
+                    else:
+                        with lock_download:  # Ensuring thread safety
+                            config.item_download_errors.append(item)
+                            config.num_error += 1
+                else:
+                    log.info(f"Unchanged: {filename_enc}")
+                
+        config.progress_num += 1
     
     except Exception as e:
         log.error(f"Error processing {filename_enc if 'filename_enc' in locals() else 'unknown'}")
@@ -205,10 +248,10 @@ def safe_submit(executor, func, item):
     
     return executor.submit(func, item)
 
-def download_the_list_of_files():
+def download_the_list_of_files(perror):
     log.info("Download process Started.")
     config.status_str = "Loading files list"
-    items = load_file_list()
+    items = load_file_list(perror)
     config.status_str = "Downloads start"
     if not items or len(items) == 0:
         log.error("No items in file")
@@ -230,12 +273,11 @@ def download_the_list_of_files():
                     futures[future] = item
                 index += 1
             for future in as_completed(futures):
-                if config.stop_flag:
-                    log.warning("Stop flag detected. Cancelling remaining downloads.")
-                    executor.shutdown(wait=False, cancel_futures=True)
-                    break
                 try:
                     future.result()
+                    if config.stop_flag:
+                        log.warning("Stop flag detected. Cancelling remaining downloads.")
+                        executor.shutdown(wait=True, cancel_futures=True)
                 except Exception as e:
                     log.error(f"Error in download executor: {e}")
                     log.error("Traceback: %s", traceback.format_exc())
@@ -247,14 +289,14 @@ def download_the_list_of_files():
             json.dump(config.item_download_errors, f, indent=2)
         log.info("Errors logged in item_download_errors.json.")
     
-    log.debug(f"config.restart {config.restart}") 
-    
     log.info("Download process completed.")
     if config.stop_flag:
         config.status_str = "Downloads ended due to stop_flag"
     else:
         config.status_str = "Downloads completed"
     config.progress_num = 0
+    config.isprocessing=False
+    config.stop_flag=False
         
 
 if __name__ == "__main__":
