@@ -48,6 +48,19 @@ Then you can use the application
 2. Use button "Generate files". You can set a OneDrive root folder to backup only a part of your OneDrive, like /Pictures
 3. Use button "Download files". You can set the download path before
 
+Command Line:
+python start.py -h
+usage: start.py [-h] [-d] [-r ROOT] [-l LOCALDIR]
+
+Script to synchronize personal OneDrive with a local folder
+
+options:
+  -h, --help            show this help message and exit
+  -d, --debug           Set debug mode
+  -r ROOT, --root ROOT  Set OneDrive Root Directory
+  -l LOCALDIR, --localdir LOCALDIR
+                        Set Local Download Directory
+
 ## Prerequisites
 
 Written in Python 3.11. Some of the included libraries require 3.1 or above; this will not work in Python 2.x.
