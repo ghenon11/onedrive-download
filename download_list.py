@@ -67,7 +67,7 @@ def download_file_by_url(url, local_file_path, item):
     
     try:
         if filesize < 100*1024*1024:  # Small files (<100MB) downloaded in one go
-            r = requests.get(url, headers=headers, allow_redirects=True, timeout=3)
+            r = requests.get(url, headers=headers, allow_redirects=True, timeout=config.TIMEOUT)
             r.raise_for_status()
             with open(local_file_path, 'wb') as f:
                 f.write(r.content)
@@ -79,7 +79,7 @@ def download_file_by_url(url, local_file_path, item):
             log_interval = filesize / 100  # Log every 1% of the total size
             next_log_threshold = log_interval  # First log threshold
             
-            response=requests.get(url, stream=True, headers=headers, allow_redirects=True, timeout=10)
+            response=requests.get(url, stream=True, headers=headers, allow_redirects=True, timeout=config.TIMEOUT)
             response.raise_for_status()
             with open(local_file_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=chunk_size):
@@ -300,4 +300,4 @@ def download_the_list_of_files(perror):
         
 
 if __name__ == "__main__":
-    download_the_list_of_files()
+    download_the_list_of_files(False)

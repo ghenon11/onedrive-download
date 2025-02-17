@@ -7,16 +7,17 @@ import utils
 # https://learn.microsoft.com/en-us/onedrive/developer/rest-api/?view=odsp-graph-online
 
 def initialize(): 
-    global OFFLINEBACKUP_PATH, ONEDRIVEDIR_PATH, MAX_RETRIES,MAX_WORKERS,MAX_WORKERS_GEN,INSTALL_DIR,BG_IMG,downloadinprogress,isprocessing,excluded_endpoints,item_download_errors,stop_flag,num_error,MAX_ERRORS,status_str,progress_num,progress_tot,MIN_FREE_SPACE_BYTES,LOG_FILE,LOG_LEVEL,LOG_BACKUP_COUNT,TIMEOUT,folder_queue,accesstoken,file_list
+    global OFFLINEBACKUP_PATH, ONEDRIVEDIR_PATH, MAX_RETRIES,MAX_WORKERS,MAX_WORKERS_GEN,INSTALL_DIR,BG_IMG,iscommandline,downloadinprogress,isprocessing,excluded_endpoints,item_download_errors,stop_flag,num_error,MAX_ERRORS,status_str,progress_num,exclusion_list,progress_tot,MIN_FREE_SPACE_BYTES,LOG_FILE,LOG_LEVEL,LOG_BACKUP_COUNT,TIMEOUT,folder_queue,accesstoken,file_list
     INSTALL_DIR=utils.get_main_dir()
     OFFLINEBACKUP_PATH = os.path.join(INSTALL_DIR, "Downloads")
     ONEDRIVEDIR_PATH = "/"
     MAX_RETRIES = 3
     MAX_WORKERS = 10
     MAX_WORKERS_GEN = 20
-    LOG_LEVEL=logging.DEBUG
+    LOG_LEVEL=logging.INFO
     stop_flag=False
     isprocessing=False
+    iscommandline=False
     num_error=0
     exclusion_list=[]
     downloadinprogress=[]
@@ -30,7 +31,7 @@ def initialize():
     LOG_FILE = os.path.join(INSTALL_DIR,"logs", "OneDriveOfflineBackup.log")
     BG_IMG = os.path.join(INSTALL_DIR,"imgs","OneDriveOfflineBackup.png")
     LOG_BACKUP_COUNT = 10  # Keep up to 10 backup logs
-    TIMEOUT = 20
+    TIMEOUT = 10
     accesstoken=""
     file_list=[]
     folder_queue = Queue()

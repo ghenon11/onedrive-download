@@ -18,7 +18,7 @@ import config,utils
 log = logging.getLogger(__name__)
 
 # Thread-safe lock for shared resources
-lock = utils.TimeoutLock()
+lock = threading.Lock()
 
 
 def get_next_link(response_dict) -> str:
@@ -138,15 +138,13 @@ def process_folders(access_token: str):
                 done, futures = concurrent.futures.wait(futures, timeout=config.TIMEOUT, return_when=concurrent.futures.FIRST_COMPLETED)
 
                 for future in done:
-                        with lock.acquire_timeout(10) as lockresult:
-                            if lockresult:
-                                current_folder, new_folders, new_files = future.result()
-                                folder_list.extend(new_folders)
-                                file_list.extend(new_files)
-                                config.status_str = f"Identifying files: \n{len(file_list)} files found so far,\n{config.folder_queue.qsize()} folders remaining"
-                                log.debug(f"Processed folder: {current_folder}")
-                            else:
-                                raise Exception("Unable to acquire lock!")
+                    with lock:
+                        current_folder, new_folders, new_files = future.result()
+                        folder_list.extend(new_folders)
+                        file_list.extend(new_files)
+                        config.status_str = f"Identifying files: \n{len(file_list)} files found so far,\n{config.folder_queue.qsize()} folders remaining"
+                        log.debug(f"Processed folder: {current_folder}")
+                          
                 # Remove completed future
                 futures.discard(future)
             except TimeoutError:

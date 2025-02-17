@@ -1,6 +1,7 @@
 import sys,os,shutil,logging
 from logging.handlers import RotatingFileHandler
 import threading
+from threading import Timer
 from contextlib import contextmanager
 
 import config
@@ -39,8 +40,10 @@ def init_logging():
             RotatingFileHandler(config.LOG_FILE, maxBytes=50 * 1024 * 1024, backupCount=config.LOG_BACKUP_COUNT)
         ]
     )
-
     
+def path_exists(a_path):
+    return os.path.exists(a_path)
+ 
 def get_main_dir():
     if getattr(sys, 'frozen', False):
         return os.path.dirname(sys.executable)
@@ -58,21 +61,36 @@ def has_enough_space(folder):
     import threading
 from contextlib import contextmanager
 
-
-class TimeoutLock(object):
-    def __init__(self):
-        self._lock = threading.RLock()
-
-    def acquire(self, blocking=True, timeout=-1):
-        return self._lock.acquire(blocking, timeout)
-
-    @contextmanager
-    def acquire_timeout(self, timeout):
-        result = self._lock.acquire(timeout=timeout)
-        yield result
-        if result:
-            self._lock.release()
-
-    def release(self):
-        self._lock.release()
+def remove_special_characters(character):
+    if character in [' ','!', '"', '#', '$', '%', '&', '(', ')', '*', '+', ',', '-', '.', '/', ':', ';', '<', '=', '>', '?', '@', '[',']', '^', '_', '`', '{', '|', '}', '~']:
+        return True
+    if character.isalnum() :
+        return True
+    else:
+        return False
         
+class RepeatedTimer:
+    def __init__(self, interval, function, *args, **kwargs):
+        self._timer = None
+        self.interval = interval
+        self.function = function
+        self.args = args
+        self.kwargs = kwargs
+        self.is_running = False
+        self.start()
+
+    def _run(self):
+        self.is_running = False
+        self.start()
+        self.function(*self.args, **self.kwargs)
+
+    def start(self):
+        if not self.is_running:
+            self._timer = Timer(self.interval, self._run)
+            self._timer.start()
+            self.is_running = True
+
+    def stop(self):
+        if self._timer:
+            self._timer.cancel()
+            self.is_running = False
