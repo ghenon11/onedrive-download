@@ -142,7 +142,7 @@ def process_folders(access_token: str):
                         current_folder, new_folders, new_files = future.result()
                         folder_list.extend(new_folders)
                         file_list.extend(new_files)
-                        config.status_str = f"Identifying files: \n{len(file_list)} files found so far,\n{config.folder_queue.qsize()} folders remaining"
+                        config.status_str = f"Identifying files: \n{len(file_list)} files found so far,\n{config.folder_queue.qsize()} folders remaining to be scanned"
                         log.debug(f"Processed folder: {current_folder}")
                           
                 # Remove completed future

@@ -38,7 +38,7 @@ def load_file_list(perror) -> list:
                 return config.file_list
         except Exception as e:
             log.warning(f"Error loading file list, attempt {attempt + 1}")
-            time.sleep( 3 * attempt) 
+            time.sleep( 5 * attempt) 
     log.error(f"Error loading file list")
     return None
 

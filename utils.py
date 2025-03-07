@@ -58,8 +58,7 @@ def has_enough_space(folder):
         return free >= config.MIN_FREE_SPACE_BYTES
     return True
     
-    import threading
-from contextlib import contextmanager
+
 
 def remove_special_characters(character):
     if character in [' ','!', '"', '#', '$', '%', '&', '(', ')', '*', '+', ',', '-', '.', '/', ':', ';', '<', '=', '>', '?', '@', '[',']', '^', '_', '`', '{', '|', '}', '~']:
@@ -68,7 +67,9 @@ def remove_special_characters(character):
         return True
     else:
         return False
-        
+
+import threading
+from contextlib import contextmanager        
 class RepeatedTimer:
     def __init__(self, interval, function, *args, **kwargs):
         self._timer = None
