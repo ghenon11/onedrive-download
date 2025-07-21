@@ -58,40 +58,39 @@ def refresh_url_from_fileid(fileid):
 def download_file_by_url(url, local_file_path, item):
     access_token = config.accesstoken
     headers = {"Authorization": "Bearer " + access_token}
-    
-    if not url:
-        return None
-    
-    filesize = item["size"]
+
+    # Use Microsoft Graph endpoint for download
     fileid = item["id"]
-    
+    filesize = item["size"]
+    graph_url = f"https://graph.microsoft.com/v1.0/me/drive/items/{fileid}/content"
+
     try:
         if filesize < 100*1024*1024:  # Small files (<100MB) downloaded in one go
-            r = requests.get(url, headers=headers, allow_redirects=True, timeout=config.TIMEOUT)
+            r = requests.get(graph_url, headers=headers, allow_redirects=True, timeout=config.TIMEOUT)
             r.raise_for_status()
             with open(local_file_path, 'wb') as f:
                 f.write(r.content)
         else:
             log.info("Big file identified, downloading in chunks")
-                        
+
             downloaded_size = 0
             chunk_size = 10*1024 * 1024  # 10MB
             log_interval = filesize / 100  # Log every 1% of the total size
             next_log_threshold = log_interval  # First log threshold
-            
-            response=requests.get(url, stream=True, headers=headers, allow_redirects=True, timeout=config.TIMEOUT)
+
+            response = requests.get(graph_url, stream=True, headers=headers, allow_redirects=True, timeout=config.TIMEOUT)
             response.raise_for_status()
             with open(local_file_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=chunk_size):
                     if chunk:
                         f.write(chunk)
                         downloaded_size += len(chunk)
-                        
+
                         # Log progress at every 1% increment
                         if downloaded_size >= next_log_threshold:
                             with lock_download:
-                                index=next((i for i, entry in enumerate(config.downloadinprogress) if entry["id"] == fileid), None)
-                                config.downloadinprogress[index]["downloaded"]=downloaded_size
+                                index = next((i for i, entry in enumerate(config.downloadinprogress) if entry["id"] == fileid), None)
+                                config.downloadinprogress[index]["downloaded"] = downloaded_size
                             next_log_threshold += log_interval  # Update next threshold
 
         return local_file_path
@@ -175,8 +174,14 @@ def process_item(item):
         if config.progress_num % 100 == 0:  # Only update every 100 files
             log.info(config.status_str)
         
-        filetype=item.get('file',{}).get('mimeType','Unknown type')
-        filecreatedby=item["createdBy"]["application"]["displayName"]
+        filetype = item.get('file', {}).get('mimeType', 'Unknown type')
+        # Handle missing 'createdBy', 'application', or 'displayName' gracefully
+        filecreatedby = None
+        created_by = item.get("createdBy", {})
+        if isinstance(created_by, dict):
+            application = created_by.get("application")
+            if isinstance(application, dict):
+                filecreatedby = application.get("displayName")
         fileid = item["id"]
         download_url = item.get('@microsoft.graph.downloadUrl')
         filename = urllib.parse.unquote(item["name"], encoding='utf-8')

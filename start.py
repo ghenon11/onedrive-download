@@ -132,38 +132,44 @@ class OneDriveDownloader(ctk.CTk):
     def update_download_status(self):
         
         try:
-            biggestsize=0
-            downloadstatus=""            
+            biggestsize = 0
+            biggestfile = "Unknown"
+            filefolder = "Unknown"
+            downloadstatus = ""
             download_in_progress = config.downloadinprogress  # List of dicts
             if not download_in_progress:
-                if config.progress_num>0:
+                if config.progress_num > 0:
                     return "No download in progress"
                 else:
                     return ""
-           
+
             nb_download = len(download_in_progress)
-            downloaded=None
+            downloaded = None
             # Find the biggest file by size
             for entry in download_in_progress:
-                if int(entry["size"])>biggestsize:
-                    biggestfile = entry["name"]
-                    biggestsize = int(entry["size"])  # Convert bytes to MB
-                    filefolder=entry["parentReference"]["path"]
-                    filefolder=filefolder.replace("/drive/root:","")
-                    downloaded=entry.get("downloaded",None)
-    
-            if biggestsize<1*1024*1024:
-                textsize="<0"
+                try:
+                    size = int(entry.get("size", 0))
+                    if size > biggestsize:
+                        biggestfile = entry.get("name", "Unknown")
+                        biggestsize = size  # Convert bytes to MB
+                        filefolder = entry.get("parentReference", {}).get("path", "Unknown")
+                        filefolder = filefolder.replace("/drive/root:", "")
+                        downloaded = entry.get("downloaded", None)
+                except Exception:
+                    continue
+
+            if biggestsize < 1 * 1024 * 1024:
+                textsize = "<0"
             else:
-                textsize=str(int(biggestsize/1024/1024))
+                textsize = str(int(biggestsize / 1024 / 1024))
             # Constructing status messages
             if nb_download == 1:
                 downloadstatus = f"1 download in progress, file is {biggestfile} ({textsize}Mb) in {filefolder}"
             else:
                 downloadstatus = f"{nb_download} downloads in progress, biggest file is {biggestfile} ({textsize}Mb) in {filefolder}"
             if downloaded:
-                downloadstatus=f"{downloadstatus}\nProgress: {int(downloaded/1024/1024)} / {int(biggestsize/1024/1024)} Mb"
-                download_ratio=downloaded / (biggestsize or 1)
+                downloadstatus = f"{downloadstatus}\nProgress: {int(downloaded / 1024 / 1024)} / {int(biggestsize / 1024 / 1024)} Mb"
+                download_ratio = downloaded / (biggestsize or 1)
                 self.oneprogress_var.set(download_ratio)
             else:
                 self.oneprogress_var.set(0)
@@ -291,10 +297,12 @@ class OneDriveDownloader(ctk.CTk):
             config.progress_num=0
             self.progress_bar.stop()
             self.progress_bar.configure(mode="determinate")
-            logging.info("Starting thread for _download_files.")
-            threading.Thread(target=self._download_files, daemon=True).start()
             logging.info("Starting thread for _get_new_access_token.")
             threading.Thread(target=self._get_new_access_token, daemon=True).start()
+            time.sleep(5)  # Ensure the token is refreshed before starting download
+            logging.info("Starting thread for _download_files.")
+            threading.Thread(target=self._download_files, daemon=True).start()
+            
         else:
             logging.warning("Attempted to download files while operation in progress.")
             messagebox.showerror("Error", "Operation in progress, download not possible now")
