@@ -45,7 +45,6 @@ def procure_new_tokens_from_user() -> tuple:
         log.debug(authorization_request_url)
         log.info("Please use the code you see in the URL on the web browser to set environment variable MS_OPENGRAPH_CODE ")
         config.status_str="Please use the code you see in the URL on the web browser to set environment variable MS_OPENGRAPH_APP_CODE"
-        # example: authorization_code = "M.R3_BAY.ec1e0d91-e035-0065-f757-494a9c206744"
         access_token = ""
         refresh_token =""
         name = "Set APP CODE"
