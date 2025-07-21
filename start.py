@@ -200,55 +200,79 @@ class OneDriveDownloader(ctk.CTk):
 
     def get_refresh_and_access_tokens(self):
         try:
+            logging.info("User requested to get refresh and access tokens.")
             if utils.path_exists("refresh_token.txt"):
+                logging.info("refresh_token.txt already exists.")
                 result = messagebox.askyesno("Confirmation", "Token already exists, are you sure you want to reinitialize it ?\nIt is not recommended.")
-                if result:
-                    access_token, refresh_token, name = procure_new_tokens_from_user()
-                    if refresh_token:
-                        save_refresh_token(refresh_token)
-                        messagebox.showinfo("Success", f"Hello {name}! Tokens saved successfully.")
-                    else:
-                        messagebox.showinfo("Initialisation", "Set MS_OPENGRAPH_APP_CODE environment variable with the code you find in your browser and restart")
+                if not result:
+                    logging.info("User cancelled token reinitialization.")
+                    return
+                logging.info("User chose to reinitialize tokens.")
+            # If file does not exist, or user chose to reinitialize, proceed to get new tokens
+            access_token, refresh_token, name = procure_new_tokens_from_user()
+            if refresh_token:
+                save_refresh_token(refresh_token)
+                logging.info(f"Tokens saved successfully for user {name}.")
+                messagebox.showinfo("Success", f"Hello {name}! Tokens saved successfully.")
+            else:
+                logging.warning("No refresh token returned after user input.")
+                messagebox.showinfo("Initialisation", "Set MS_OPENGRAPH_APP_CODE environment variable with the code you find in your browser and restart")
         except Exception as e:
+            logging.error(f"Error when procuring token: {e}")
+            logging.error("Traceback: %s", traceback.format_exc())
             messagebox.showerror("Error", f"Error when procuring token {e}")
 
     def use_refresh_token_to_get_new_access_token(self):
         try:
+            logging.info("Attempting to use refresh token to get new access token.")
             refresh_token = load_refresh_token_from_file()
             if not refresh_token:
+                logging.error("No refresh token found.")
                 messagebox.showerror("Error", "No refresh token found.")
                 return
             new_access_token = get_new_access_token_using_refresh_token(refresh_token)
             save_access_token(new_access_token)
+            logging.info("Access token refreshed and saved.")
         except Exception as e:
+            logging.error(f"Error when refreshing token: {e}")
+            logging.error("Traceback: %s", traceback.format_exc())
             messagebox.showerror("Error", f"Error when refreshing token {e}")
 
     def generate_list(self):
         config.stop_flag=False
         if config.isprocessing==False:
+            logging.info("User started file list generation.")
             config.isprocessing=True
             config.progress_num=-1
             self.progress_bar.configure(mode="indeterminate")
             self.progress_bar.start()
+            logging.info("Starting thread for _generate_list.")
             threading.Thread(target=self._generate_list, daemon=True).start()
         else:
+            logging.warning("Attempted to generate list while operation in progress.")
             messagebox.showerror("Error", "Operation in progress, generation not possible now")
             
     
     def _generate_list(self):
         try:
+            logging.info("Thread _generate_list started.")
             self.use_refresh_token_to_get_new_access_token()
             access_token = load_access_token_from_file()
             if not access_token:
+                logging.error("No access token found for file list generation.")
                 messagebox.showerror("Error", "No access token found.")
                 return
             generate_list_of_all_files_and_folders(access_token)
+            logging.info("File list generation completed.")
         except Exception as e:
+            logging.error(f"Error in _generate_list: {e}")
+            logging.error("Traceback: %s", traceback.format_exc())
             messagebox.showerror("Error", str(e))
     
     def download_files(self):
         config.stop_flag=False
         if config.isprocessing==False:
+            logging.info("User started file download.")
             config.isprocessing=True
             config.status_str="Initializing downloads"
             config.num_error=0
@@ -267,33 +291,42 @@ class OneDriveDownloader(ctk.CTk):
             config.progress_num=0
             self.progress_bar.stop()
             self.progress_bar.configure(mode="determinate")
+            logging.info("Starting thread for _download_files.")
             threading.Thread(target=self._download_files, daemon=True).start()
+            logging.info("Starting thread for _get_new_access_token.")
             threading.Thread(target=self._get_new_access_token, daemon=True).start()
         else:
+            logging.warning("Attempted to download files while operation in progress.")
             messagebox.showerror("Error", "Operation in progress, download not possible now")
         
     
     def _get_new_access_token(self):
         try:
-            logging.info("Refreshing Token")
+            logging.info("Refreshing Token (background thread)")
             self.use_refresh_token_to_get_new_access_token()
             access_token = load_access_token_from_file()
             config.accesstoken=access_token
             logging.debug("Token refreshed")
             self.after(1200000, self._get_new_access_token) # every 20 mins refresh token (TTL is often 60mins)
         except Exception as e:
-            logging.error("Error refreshing access token: {e}")
+            logging.error(f"Error refreshing access token: {e}")
+            logging.error("Traceback: %s", traceback.format_exc())
     
     def _download_files(self):
         try:
+            logging.info("Thread _download_files started.")
             self.use_refresh_token_to_get_new_access_token()
             access_token = load_access_token_from_file()
             config.accesstoken=access_token
             if not access_token:
+                logging.error("No access token found for file download.")
                 messagebox.showerror("Error", "No access token found.")
                 return
             download_the_list_of_files(self.checkbox.get())
+            logging.info("File download completed.")
         except Exception as e:
+            logging.error(f"Error in _download_files: {e}")
+            logging.error("Traceback: %s", traceback.format_exc())
             messagebox.showerror("Error", f"When launching file download: {e}")
     
     def choose_directory(self):
@@ -302,14 +335,15 @@ class OneDriveDownloader(ctk.CTk):
             self.download_dir_var.set(directory)
             config.OFFLINEBACKUP_PATH = directory
             config.status_str = f"Download directory set to: {directory}"
-            log.info(config.status_str)
+            logging.info(config.status_str)
     
     def set_onedrive_directory(self):
         config.ONEDRIVEDIR_PATH = self.root_dir_var.get()
         config.status_str = f"OneDrive Root directory set to: {config.ONEDRIVEDIR_PATH}"
-        log.info(config.status_str)
+        logging.info(config.status_str)
     
     def stop_download(self):
+        logging.info("User requested to stop download.")
         config.stop_flag = True
     
     def confirm_close(self):
@@ -317,6 +351,7 @@ class OneDriveDownloader(ctk.CTk):
             self.exit_app()
     
     def exit_app(self):
+        logging.info("User requested to exit application.")
         self.stop_download()
         logging.info("Exiting Application")
         self.quit()

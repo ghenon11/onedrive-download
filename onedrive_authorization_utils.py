@@ -14,6 +14,10 @@ log = logging.getLogger(__name__)
 # MS_OPENGRAPH_CLIENT_SECRET 
 
 # TODO check variable exists !!
+# set APP_ID and CLIENT_SECRET in your environment variables based on your Azure app registration
+# then get token from the app to have APP_CODE in your browser
+# set APP_CODE in your environment variables and you are good to go
+
 APP_ID=os.environ.get("MS_OPENGRAPH_APP_ID")
 CLIENT_SECRET=os.environ.get("MS_OPENGRAPH_CLIENT_SECRET")
 APP_CODE=os.environ.get("MS_OPENGRAPH_APP_CODE")
